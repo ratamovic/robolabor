@@ -2,11 +2,27 @@ package com.codexperiments.robolabor.task;
 
 public interface TaskManager
 {
-    /**
-     * Exécute une tâche asynchrone.
-     * @param handler Décrit le contenu de la tâche asynchrone.
-     */
-    <TResult> void execute(TaskHandler<TResult> handler);
+    void manage(Object pOwner);
+    
+    void unmanage(Object pOwner);
+    
+    <TResult> TaskBuilder<TResult> execute(Task<TResult> pTask);
 
-    void notifyProgress(TaskProgressNotifier pProgressHandler);
+    <TResult> boolean listenPending(TaskCallback<TResult> pTaskListener);
+
+    void notifyProgress(TaskProgress pProgress);
+    
+    interface TaskBuilder<TResult> {
+        TaskBuilder<TResult> singleInstance(Object pId);
+        
+        TaskBuilder<TResult> dontKeepResult();
+        
+        TaskBuilder<TResult> keepResultOnHold();
+        
+//        TaskBuilder<TResult> bindToOwner();
+        
+        void inMainQueue();
+        
+        void inBackgroundQueue();
+    }
 }

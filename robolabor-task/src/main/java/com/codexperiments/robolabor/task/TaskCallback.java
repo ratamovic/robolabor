@@ -1,14 +1,7 @@
 package com.codexperiments.robolabor.task;
 
-public interface TaskHandler<TResult>
+public interface TaskCallback<TResult>
 {
-    /**
-     * Exécution de la tâche de fond sur un thread séparé. Ne pas modifier d'objets liés à l'UI ici.
-     * @throws Exception Si une erreur quelconque survient, alors celle-ci est renvoyé au
-     *             gestionnaire onError.
-     */
-    TResult onProcess() throws Exception;
-
     /**
      * Si l'exécution de onProgress() se termine correctement, alors onFinish() est appelé sur le
      * thread UI. C'est ici que doivent être modifiés les objets liés à l'UI (ex: fusion des
@@ -21,5 +14,5 @@ public interface TaskHandler<TResult>
      * message d'erreur ou modification/effacement des données affichées dans l'UI doivent être
      * réalisé ici.
      */
-    void onError(Exception pException);
+    void onError(Throwable pThrowable);
 }

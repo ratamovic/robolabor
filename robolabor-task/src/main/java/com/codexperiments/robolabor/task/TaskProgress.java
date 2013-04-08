@@ -1,6 +1,6 @@
 package com.codexperiments.robolabor.task;
 
-public interface TaskProgressNotifier
+public interface TaskProgress
 {
     void onProgress();
 }

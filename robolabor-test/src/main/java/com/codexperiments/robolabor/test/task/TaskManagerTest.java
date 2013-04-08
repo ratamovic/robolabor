@@ -15,9 +15,9 @@ import android.content.res.Resources;
 import android.os.Bundle;
 import android.util.Log;
 
-import com.codexperiments.robolabor.task.TaskHandler;
+import com.codexperiments.robolabor.task.AndroidTaskManager;
+import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManager;
-import com.codexperiments.robolabor.task.TaskManagerAndroid;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.ApplicationContext;
 import com.codexperiments.robolabor.test.common.TestApplication;
@@ -40,11 +40,15 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
     @Override
     protected void setUpOnUIThread() throws Exception {
         super.setUpOnUIThread();
-        mApplicationContext.registerManager(new TaskManagerAndroid());
+//        TaskManagerAndroid lTaskManagerAndroid = new TaskManagerAndroid();
+//        mApplicationContext.registerManager(lTaskManagerAndroid);
+        AndroidTaskManager lTaskManager = new AndroidTaskManager();
+        mApplicationContext.registerManager(lTaskManager);
     }
 
     @Override
     protected void tearDown() throws Exception {
+        mApplicationContext.removeManager(TaskManager.class);
         super.tearDown();
     }
 
@@ -56,7 +60,7 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
         assertThat(taskFinished.await(TIMEOUT, TimeUnit.MILLISECONDS), equalTo(true));
         
         TaskActivity lCurrentActivity = (TaskActivity) TestApplication.Instance.getCurrentActivity();
-        assertThat(lCurrentActivity, equalTo(lActivity)); // Checks activity is still the same.
+        assertThat(lCurrentActivity, equalTo(lActivity)); // Ensures activity is still the same.
         assertThat(lCurrentActivity.getTaskResult(), equalTo(TASK_RESULT));
         assertThat(lCurrentActivity.getTaskException(), nullValue());
     }
@@ -70,7 +74,7 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
         assertThat(taskFinished.await(TIMEOUT, TimeUnit.MILLISECONDS), equalTo(true));
         
         TaskActivity lCurrentActivity = (TaskActivity) TestApplication.Instance.getCurrentActivity();
-        assertThat(lCurrentActivity, not(equalTo(lActivity))); // Checks activity has been recreated.
+        assertThat(lCurrentActivity, not(equalTo(lActivity))); // Ensures activity has been recreated.
         assertThat(lCurrentActivity.getTaskResult(), equalTo(TASK_RESULT));
         assertThat(lCurrentActivity.getTaskException(), nullValue());
     }
@@ -82,6 +86,9 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
         
         lActivity = terminateActivity(lActivity);
         assertThat(taskFinished.await(TIMEOUT, TimeUnit.MILLISECONDS), equalTo(true));
+    }
+
+    public void testExecute_xxx() throws InterruptedException {
     }
 
     private void recreateActivitySeveralTimes(TaskActivity pActivity, int pCount) throws InterruptedException {
@@ -127,7 +134,7 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
             TestApplication.Instance.setCurrentActivity(this);
             ApplicationContext lApplicationContext = ApplicationContext.from(this);
             mTaskManager = lApplicationContext.getManager(TaskManager.class);
-            ((TaskManagerAndroid) mTaskManager).manage(this);
+            mTaskManager.manage(this);
 
             mTaskResult = null;
             mTaskException = null;
@@ -145,13 +152,13 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
         @Override
         protected void onStart() {
             super.onStart();
-            ((TaskManagerAndroid) mTaskManager).manage(this);
+            mTaskManager.manage(this);
         }
 
         @Override
         protected void onStop() {
             super.onStop();
-            ((TaskManagerAndroid) mTaskManager).unmanage(this);
+            mTaskManager.unmanage(this);
         }
         
         @Override
@@ -165,7 +172,7 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
             final CountDownLatch taskFinished = new CountDownLatch(1);
             Log.d(getClass().getSimpleName(), "111 " + taskFinished);
             
-            mTaskManager.execute(new TaskHandler<Integer>() {
+            mTaskManager.execute(new Task<Integer>() {
                 public Integer onProcess() throws Exception {
                     Log.d(getClass().getSimpleName(), "AAA ");
                     Thread.sleep(TASK_DURATION);
@@ -184,11 +191,11 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
                     taskFinished.countDown();
                 }
 
-                public void onError(Exception pTaskException) {
+                public void onError(Throwable pThrowable) {
                     Log.d(getClass().getSimpleName(), "444 ");
-                    mTaskException = pTaskException;
+                    mTaskException = pThrowable;
                 }
-            });
+            }).dontKeepResult().inMainQueue();
             return taskFinished;
         }
 
@@ -199,5 +206,58 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
         public Throwable getTaskException() {
             return mTaskException;
         }
+
+//        public void runTaskXXX(final Integer pTaskRequest) {
+//            AndroidTaskManager lTaskManager = new AndroidTaskManager();
+//            lTaskManager.manage(this);
+//            lTaskManager.execute(new Task<Integer>() {
+//                public Integer onProcess() throws Exception {
+//                    return 999;
+//                }
+//
+//                public void onFinish(Integer pResult) {
+//                    mTaskResult = pResult;
+//                }
+//
+//                public void onError(Throwable pThrowable) {
+//                }
+//            }).inMainQueue();
+            
+//            TaskExecutorSingleQueue lTaskManager = new TaskExecutorSingleQueue(null);
+//            lTaskManager.execute(new TaskHandler<Integer>() {
+//                public Integer onProcess() throws Exception {
+//                    Thread.sleep(TASK_DURATION);
+//                    return pTaskRequest;
+//                }
+//
+//                public void onFinish(Integer pTaskResult) {
+//                    if (TaskActivity.this != null) {
+//                        mTaskResult = pTaskResult;
+//                    }
+//                }
+//
+//                public void onError(Throwable pThrowable) {
+//                    mTaskException = pThrowable;
+//                }
+//            })
+//            .singleInstance(pTaskRequest)
+//            .inSingleTaskQueue();
+            
+//            lTaskManager.attachIfPending(new TaskHandler<Integer>() {
+//                public boolean isTarget(Integer pResult) {
+//                    return pResult == 666;
+//                }
+//                
+//                public void onFinish(Integer pTaskResult) {
+//                    if (TaskActivity.this != null) {
+//                        mTaskResult = pTaskResult;
+//                    }
+//                }
+//
+//                public void onError(Throwable pThrowable) {
+//                    mTaskException = pThrowable;
+//                }
+//            });
+//        }
     }
 }
