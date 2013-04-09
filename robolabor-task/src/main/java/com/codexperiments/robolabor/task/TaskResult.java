@@ -1,6 +1,6 @@
 package com.codexperiments.robolabor.task;
 
-public interface TaskCallback<TResult>
+public interface TaskResult<TResult>
 {
     /**
      * Si l'exécution de onProgress() se termine correctement, alors onFinish() est appelé sur le

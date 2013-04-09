@@ -5,7 +5,7 @@ import java.util.List;
 
 import android.app.Activity;
 import android.app.Application;
-import android.app.Fragment;
+import android.support.v4.app.Fragment;
 
 import com.codexperiments.robolabor.exception.InternalException;
 import com.codexperiments.robolabor.exception.UnknownManagerException;

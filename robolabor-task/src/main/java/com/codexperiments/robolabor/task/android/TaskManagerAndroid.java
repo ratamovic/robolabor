@@ -1,4 +1,4 @@
-package com.codexperiments.robolabor.task;
+package com.codexperiments.robolabor.task.android;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -6,24 +6,28 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
-import com.codexperiments.robolabor.task.context.ActivityTaskContext;
-
 import android.os.Handler;
 import android.os.Looper;
 
-public class AndroidTaskManager implements TaskManager
+import com.codexperiments.robolabor.task.Task;
+import com.codexperiments.robolabor.task.TaskContext;
+import com.codexperiments.robolabor.task.TaskManager;
+import com.codexperiments.robolabor.task.TaskProgress;
+import com.codexperiments.robolabor.task.TaskResult;
+
+public class TaskManagerAndroid implements TaskManager
 {
-    /*private*/ List<AndroidTaskContainer<?>> mTaskContainers;
-    /*private*/ ActivityTaskContext mContextActivity;
+    /*private*/ List<TaskContainerAndroid<?>> mTaskContainers;
+    /*private*/ TaskContextActivity mContextActivity;
 
     /*private*/ Handler mUIQueue;
     /*private*/ ExecutorService mMainExecutor;
 
 
-    public AndroidTaskManager() {
+    public TaskManagerAndroid() {
         super();
-        mTaskContainers = new LinkedList<AndroidTaskContainer<?>>();
-        mContextActivity = new ActivityTaskContext();
+        mTaskContainers = new LinkedList<TaskContainerAndroid<?>>();
+        mContextActivity = new TaskContextActivity();
         
         mUIQueue = new Handler(Looper.getMainLooper());
         mMainExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
@@ -46,7 +50,7 @@ public class AndroidTaskManager implements TaskManager
     public void manage(Object pOwner) {
         mContextActivity.manage(pOwner);
         
-        for (AndroidTaskContainer<?> lTaskContainer : mTaskContainers) {
+        for (TaskContainerAndroid<?> lTaskContainer : mTaskContainers) {
             if (lTaskContainer.isProcessed() && !lTaskContainer.isFinished()) {
                 lTaskContainer.finish();
             }
@@ -60,11 +64,11 @@ public class AndroidTaskManager implements TaskManager
 
     @Override
     public <TResult> TaskBuilder<TResult> execute(Task<TResult> pTask) {
-        return new AndroidTaskContainer<TResult>(pTask);
+        return new TaskContainerAndroid<TResult>(pTask);
     }
 
     @Override
-    public <TResult> boolean listenPending(TaskCallback<TResult> pTaskListener) {
+    public <TResult> boolean listenPending(TaskResult<TResult> pTaskListener) {
         return true;
     }
 
@@ -80,7 +84,7 @@ public class AndroidTaskManager implements TaskManager
 
 
 
-    private class AndroidTaskContainer<TResult> implements TaskBuilder<TResult>, Runnable {
+    private class TaskContainerAndroid<TResult> implements TaskBuilder<TResult>, Runnable {
         /*private*/ Task<TResult> mTask;
         /*private*/ TaskContext mContext;
         /*private*/ Object mId;
@@ -92,26 +96,26 @@ public class AndroidTaskManager implements TaskManager
         /*private*/ boolean mProcessed;
         /*private*/ boolean mFinished;
 
-        public AndroidTaskContainer(Task<TResult> pTask) {
+        public TaskContainerAndroid(Task<TResult> pTask) {
             super();
             mTask = pTask;
             mKeepResultOnHold = true;
             mFinished = false;
         }
 
-        public AndroidTaskContainer<TResult> singleInstance(Object pId) {
+        public TaskContainerAndroid<TResult> singleInstance(Object pId) {
             mId = pId;
             return this;
         }
 
         @Override
-        public AndroidTaskContainer<TResult> dontKeepResult() {
+        public TaskContainerAndroid<TResult> dontKeepResult() {
             mKeepResultOnHold = false;
             return this;
         }
 
         @Override
-        public AndroidTaskContainer<TResult> keepResultOnHold() {
+        public TaskContainerAndroid<TResult> keepResultOnHold() {
             mKeepResultOnHold = true;
             return this;
         }

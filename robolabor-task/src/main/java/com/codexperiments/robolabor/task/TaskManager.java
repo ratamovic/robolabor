@@ -8,7 +8,7 @@ public interface TaskManager
     
     <TResult> TaskBuilder<TResult> execute(Task<TResult> pTask);
 
-    <TResult> boolean listenPending(TaskCallback<TResult> pTaskListener);
+    <TResult> boolean listenPending(TaskResult<TResult> pTaskListener);
 
     void notifyProgress(TaskProgress pProgress);
     

@@ -1,4 +1,4 @@
-package com.codexperiments.robolabor.task.context;
+package com.codexperiments.robolabor.task.android;
 
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
@@ -6,15 +6,14 @@ import java.util.Map;
 
 import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskContext;
-import com.codexperiments.robolabor.task.TaskHelper;
 
-public class ActivityTaskContext implements TaskContext
+public class TaskContextActivity implements TaskContext
 {
     private Map<Task<?>, Class<?>> mTaskOwnerTypes;
     private Map<Class<?>, WeakReference<Object>> mTaskOwnersByType;
 
 
-    public ActivityTaskContext() {
+    public TaskContextActivity() {
         super();
         mTaskOwnerTypes = new HashMap<Task<?>, Class<?>>();
         mTaskOwnersByType = new HashMap<Class<?>, WeakReference<Object>>();
@@ -33,7 +32,7 @@ public class ActivityTaskContext implements TaskContext
 
     @Override
     public boolean unmap(Task<?> pTask) {
-        Object lOuter = TaskHelper.saveOuterRef(pTask);
+        Object lOuter = TaskContext.Helper.saveOuterRef(pTask);
         if (lOuter == null) return false;
         
         Class<?> lOuterType = lOuter.getClass();
@@ -47,6 +46,6 @@ public class ActivityTaskContext implements TaskContext
         Class<?> lOuterType = mTaskOwnerTypes.get(pTask);
         WeakReference<Object> lOuterRef = mTaskOwnersByType.get(lOuterType);
         
-        return TaskHelper.restoreOuterRef(pTask, lOuterRef.get());
+        return TaskContext.Helper.restoreOuterRef(pTask, lOuterRef.get());
     }
 }

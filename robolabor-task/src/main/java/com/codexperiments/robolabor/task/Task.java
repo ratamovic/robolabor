@@ -1,6 +1,6 @@
 package com.codexperiments.robolabor.task;
 
-public interface Task<TResult> extends TaskCallback<TResult>
+public interface Task<TResult> extends TaskResult<TResult>
 {
     /**
      * Exécution de la tâche de fond sur un thread séparé. Ne pas modifier d'objets liés à l'UI ici.
