@@ -27,13 +27,19 @@ public class TaskFragment extends Fragment {
     private Integer mTaskResult;
     private Throwable mTaskException;
     
-    public static TaskFragment fragmentToDestroy() {
+    public static TaskFragment newInstanceCheckNull() {
         TaskFragment fragment = new TaskFragment();
 
         Bundle args = new Bundle();
-        args.putBoolean("CheckActivityNull", true);
+        args.putBoolean("CheckFragmentNull", true);
         fragment.setArguments(args);
 
+        return fragment;
+    }
+
+    public static TaskFragment newInstance() {
+        TaskFragment fragment = new TaskFragment();
+        fragment.setArguments(new Bundle());
         return fragment;
     }
 
@@ -81,7 +87,7 @@ public class TaskFragment extends Fragment {
 
     public CountDownLatch runTask(final Integer pTaskResult) {
         final CountDownLatch taskFinished = new CountDownLatch(1);
-        final boolean lCheckActivityNull = getArguments().getBoolean("CheckActivityNull", false);
+        final boolean lCheckFragmentNull = getArguments().getBoolean("CheckFragmentNull", false);
         
         mTaskManager.execute(new Task<Integer>() {
             public Integer onProcess() throws Exception {
@@ -90,7 +96,7 @@ public class TaskFragment extends Fragment {
             }
 
             public void onFinish(Integer pTaskResult) {
-                if (lCheckActivityNull) {
+                if (lCheckFragmentNull) {
                     assertThat(TaskFragment.this, nullValue());
                 } else if (TaskFragment.this != null) {
                     mTaskResult = pTaskResult;
@@ -115,7 +121,7 @@ public class TaskFragment extends Fragment {
 
 
 
-    public static class TaskActivity extends FragmentActivity {
+    public static class Activity extends FragmentActivity {
         private TaskManager mTaskManager;
         
         @Override
@@ -127,6 +133,15 @@ public class TaskFragment extends Fragment {
             ApplicationContext lApplicationContext = ApplicationContext.from(this);
             mTaskManager = lApplicationContext.getManager(TaskManager.class);
             mTaskManager.manage(this);
+            
+
+            if (pBundle == null) {
+                getSupportFragmentManager().beginTransaction()
+                .add(0, TaskFragment.newInstance(), "uniquetag")
+                .replace(R.id.activity_content, TaskFragment.newInstance())
+                .add(0, TaskFragment.newInstance())
+                .commit();
+            }
         }
 
         @Override
@@ -139,6 +154,18 @@ public class TaskFragment extends Fragment {
         protected void onStop() {
             super.onStop();
             mTaskManager.unmanage(this);
+        }
+        
+        public TaskFragment getFragmentWithId() {
+            return (TaskFragment) getSupportFragmentManager().findFragmentById(R.id.activity_content);
+        }
+        
+        public TaskFragment getFragmentWithTag() {
+            return (TaskFragment) getSupportFragmentManager().findFragmentByTag("uniquetag");
+        }
+        
+        public TaskFragment getFragmentNoIdNorTag() {
+            return (TaskFragment) getSupportFragmentManager().findFragmentById(0);
         }
     }
 }

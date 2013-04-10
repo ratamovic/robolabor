@@ -1,9 +1,14 @@
 package com.codexperiments.robolabor.test.common;
 
+import static java.lang.Thread.*;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import android.app.Activity;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.test.ActivityInstrumentationTestCase2;
 
 public class TestCase<TActivity extends Activity> extends ActivityInstrumentationTestCase2<TActivity> {
@@ -60,5 +65,29 @@ public class TestCase<TActivity extends Activity> extends ActivityInstrumentatio
     protected TActivity getCurrentActivity() {
         
         return (TActivity) TestApplication.Instance.getCurrentActivity();
+    }
+
+    protected void recreateActivitySeveralTimes(int pCount) throws InterruptedException {
+        Activity lActivity = getActivity();
+        for (int i = 0; i < pCount; ++i) {
+            // Wait some time before turning.
+            sleep(500);
+
+            Resources lResources = getInstrumentation().getTargetContext().getResources();
+            Configuration lConfiguration = lResources.getConfiguration();
+            if (lConfiguration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                lActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            } else {
+                lActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+            }
+        }
+    }
+    
+    protected TActivity terminateActivity(TActivity pActivity) throws InterruptedException {
+        TActivity lActivity = pActivity;
+        lActivity.finish();
+        setActivity(null);
+        TestApplication.Instance.setCurrentActivity(null);
+        return null;
     }
 }
