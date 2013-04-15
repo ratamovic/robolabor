@@ -92,18 +92,21 @@ public class TaskManagerAndroid implements TaskManager
         });
     }
 
-    protected Object unmap(Task<?> pTask) {
-        Object lOuter = (Object) saveOuterRef(pTask);
+    protected Object unmap(TaskContainerAndroid<?> pContainer) {
+        Object lOuter = (Object) saveOuterRef(pContainer.mTask);
         if (lOuter == null) return null;
         
         Object lOuterId = computeId(lOuter);
         mTaskOwnersByType.put(lOuterId, new WeakReference<Object>(lOuter));
+        mMainExecutor.execute(pContainer);
         return lOuterId;
     }
 
-    protected boolean map(Task<?> pTask, Object pOuterId) {
-        WeakReference<?> lOuterRef = mTaskOwnersByType.get(pOuterId);
-        return restoreOuterRef(pTask, lOuterRef.get());
+    protected boolean map(TaskContainerAndroid<?> pContainer) {
+        WeakReference<?> lOuterRef = mTaskOwnersByType.get(pContainer.mOwnerId);
+        boolean lIsSuccess = restoreOuterRef(pContainer.mTask, lOuterRef.get());
+        mTaskContainers.remove(this);
+        return lIsSuccess;
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
@@ -117,7 +120,7 @@ public class TaskManagerAndroid implements TaskManager
         throw InternalException.invalidConfiguration(null); // TODO!!
     }
 
-    public static Object saveOuterRef(Object pHandler) {
+    public Object saveOuterRef(Object pHandler) {
         // Dereference the outer class to avoid any conflict.
         try {
             Field lOuterRefField = findOuterRefField(pHandler);
@@ -132,7 +135,7 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
-    public static boolean restoreOuterRef(Object pObject, Object pOuterRef) {
+    public boolean restoreOuterRef(Object pObject, Object pOuterRef) {
         // Dereference the outer class to avoid any conflict.
         try {
             if (pOuterRef == null) return false;
@@ -148,7 +151,7 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
-    private static Field findOuterRefField(Object pHandler) {
+    private Field findOuterRefField(Object pHandler) {
         Field[] lFields = pHandler.getClass().getDeclaredFields();
         for (Field lField : lFields) {
             String lFieldName = lField.getName();
@@ -200,8 +203,7 @@ public class TaskManagerAndroid implements TaskManager
 
         @Override
         public void inMainQueue() {
-            mOwnerId = unmap(mTask);
-            mMainExecutor.execute(this);
+            mOwnerId = unmap(this);
         }
 
         @Override
@@ -231,7 +233,7 @@ public class TaskManagerAndroid implements TaskManager
                 if (pConfirmProcessed) mProcessed = true;
                 if (mFinished || !mProcessed) return;
                 
-                if (map(mTask, mOwnerId) || !mKeepResultOnHold) {
+                if (map(this) || !mKeepResultOnHold) {
                     try {
                         if (mThrowable == null) {
                             mTask.onFinish(mResult);
@@ -240,7 +242,6 @@ public class TaskManagerAndroid implements TaskManager
                         }
                     } finally {
                         mFinished = true;
-                        mTaskContainers.remove(this);
                     }
                 }
             }
