@@ -62,10 +62,12 @@ public class TaskManagerAndroid implements TaskManager
     @Override
     public <TResult> void execute(Task<TResult> pTask) {
         Task.Configuration lConfiguration = mTaskResolver.resolveConfiguration(pTask);
-        lConfiguration.getExecutor().execute(buildContainer(dereference(pTask), pTask, lConfiguration));
+        Object lOwnerId = dereferenceOwner(pTask);
+        TaskContainerAndroid<TResult> lContainer = makeContainer(lOwnerId, pTask, lConfiguration);
+        lConfiguration.getExecutor().execute(lContainer);
     }
 
-    protected Object dereference(Task<?> pTask) {
+    protected Object dereferenceOwner(Task<?> pTask) {
         // Dereference the outer class to avoid any conflict.
         try {
             Field lOwnerField = resolveOwnerField(pTask);
@@ -87,9 +89,9 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
     
-    protected <TResult> TaskContainerAndroid<TResult> buildContainer(Object pOwnerId,
-                                                                     Task<TResult> pTask,
-                                                                     Task.Configuration pConfiguration)
+    protected <TResult> TaskContainerAndroid<TResult> makeContainer(Object pOwnerId,
+                                                                    Task<TResult> pTask,
+                                                                    Task.Configuration pConfiguration)
     {
         if (pTask instanceof TaskIdentity) {
             Object lTaskId = ((TaskIdentity) pTask).getId();
@@ -124,7 +126,7 @@ public class TaskManagerAndroid implements TaskManager
         } else {
             if (pConfirmProcessed) pContainer.mProcessed = true;
             
-            if (pContainer.mProcessed && !pContainer.mFinished && canFinish(pContainer)) {
+            if (pContainer.mProcessed && !pContainer.mFinished && referenceOwner(pContainer)) {
                 try {
                     if (pContainer.mThrowable == null) {
                         pContainer.mTask.onFinish(pContainer.mResult);
@@ -138,7 +140,7 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
-    protected <TResult> boolean canFinish(TaskContainerAndroid<TResult> pContainer) {
+    protected <TResult> boolean referenceOwner(TaskContainerAndroid<TResult> pContainer) {
         WeakReference<?> lOwnerRef = mTaskOwnersByType.get(pContainer.mOwnerId);
         try {
             if (lOwnerRef != null || !pContainer.mConfiguration.keepResultOnHold()) {
