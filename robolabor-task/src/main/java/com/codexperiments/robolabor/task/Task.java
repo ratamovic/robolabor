@@ -1,5 +1,7 @@
 package com.codexperiments.robolabor.task;
 
+import java.util.concurrent.ExecutorService;
+
 public interface Task<TResult> extends TaskResult<TResult>
 {
     /**
@@ -8,4 +10,11 @@ public interface Task<TResult> extends TaskResult<TResult>
      *             gestionnaire onError.
      */
     TResult onProcess() throws Exception;
+    
+
+    public interface Configuration {
+        ExecutorService getExecutor();
+
+        boolean keepResultOnHold();
+    }
 }

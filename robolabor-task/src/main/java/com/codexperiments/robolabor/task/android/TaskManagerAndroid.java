@@ -2,68 +2,50 @@ package com.codexperiments.robolabor.task.android;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 
 import android.os.Handler;
 import android.os.Looper;
 
 import com.codexperiments.robolabor.exception.InternalException;
 import com.codexperiments.robolabor.task.Task;
-import com.codexperiments.robolabor.task.TaskConfiguration;
 import com.codexperiments.robolabor.task.TaskIdentity;
-import com.codexperiments.robolabor.task.TaskRuleExecutor;
-import com.codexperiments.robolabor.task.TaskRuleMapping;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.task.TaskResult;
 
 public class TaskManagerAndroid implements TaskManager
 {
-    /*private*/ List<TaskRuleMapping<?>> mRuleMappings;
-    /*private*/ List<TaskRuleExecutor<?>> mRuleExecutors;
-    /*private*/ Map<Object, WeakReference<?>> mTaskOwnersByType;
-    /*private*/ List<TaskContainerAndroid<?>> mTaskContainers;
+    private TaskManager.Configuration mTaskResolver;
+    private Map<Object, WeakReference<?>> mTaskOwnersByType;
+    private List<TaskContainerAndroid<?>> mTaskContainers;
 
-    /*private*/ Handler mUIQueue;
-    /*private*/ Thread mUIThread;
-    /*private*/ ExecutorService mMainExecutor;
+    private Handler mUIQueue;
+    private Thread mUIThread;
 
 
-    public TaskManagerAndroid() {
+    public TaskManagerAndroid(TaskManager.Configuration pTaskResolver) {
         super();
-        mRuleMappings = new ArrayList<TaskRuleMapping<?>>();
-        mRuleExecutors = new ArrayList<TaskRuleExecutor<?>>();
+        mTaskResolver = pTaskResolver;
         mTaskContainers = new LinkedList<TaskContainerAndroid<?>>();
         mTaskOwnersByType = new HashMap<Object, WeakReference<?>>();
         
         mUIQueue = new Handler(Looper.getMainLooper());
         mUIThread = mUIQueue.getLooper().getThread();
-        mMainExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
-            public Thread newThread(Runnable pRunnable) {
-                Thread thread = new Thread(pRunnable);
-                thread.setDaemon(true);
-                return thread;
-            }
-        });
     }
 
     public void start() {
     }
 
     public void stop() {
-        mMainExecutor.shutdown();
     }
     
     @Override
     public void manage(Object pOwner) {
-        mTaskOwnersByType.put(resolveOwnerId(pOwner), new WeakReference<Object>(pOwner));
+        mTaskOwnersByType.put(mTaskResolver.resolveOwnerId(pOwner), new WeakReference<Object>(pOwner));
         for (TaskContainerAndroid<?> lTaskContainer : mTaskContainers) {
             finish(lTaskContainer, false);
         }
@@ -71,7 +53,7 @@ public class TaskManagerAndroid implements TaskManager
 
     @Override
     public void unmanage(Object pOwner) {
-        WeakReference<?> lWeakRef = mTaskOwnersByType.get(resolveOwnerId(pOwner));
+        WeakReference<?> lWeakRef = mTaskOwnersByType.get(mTaskResolver.resolveOwnerId(pOwner));
         if ((lWeakRef != null) && (lWeakRef.get() == pOwner)) {
             lWeakRef.clear();
         }
@@ -79,30 +61,8 @@ public class TaskManagerAndroid implements TaskManager
 
     @Override
     public <TResult> void execute(Task<TResult> pTask) {
-        TaskConfiguration lConfiguration = resolveConfiguration(pTask);
-        Object lOwnerId = dereference(pTask);
-        TaskContainerAndroid<TResult> lContainer = buildContainer(pTask, lConfiguration, lOwnerId);
-        
-        lConfiguration.getExecutor().execute(lContainer);
-    }
-
-//    @Override
-//    public <TResult> void execute(Task<TResult> pTask, TaskConfiguration pConfiguration) {
-//        Object lOwnerId = dereference(pTask);
-//        TaskContainerAndroid<TResult> lContainer = buildContainer(pTask, pConfiguration, lOwnerId);
-//        
-//        pConfiguration.getExecutor().execute(lContainer);
-//    }
-    
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private TaskConfiguration resolveConfiguration(Task<?> pTask) {
-        Class<?> lTaskType = pTask.getClass();
-        for (TaskRuleExecutor lRuleExecutor : mRuleExecutors) {
-            if (lTaskType == lRuleExecutor.getTaskType()) {
-                return lRuleExecutor.getConfiguration(pTask);
-            }
-        }
-        throw InternalException.invalidConfiguration(null); // TODO!!
+        Task.Configuration lConfiguration = mTaskResolver.resolveConfiguration(pTask);
+        lConfiguration.getExecutor().execute(buildContainer(dereference(pTask), pTask, lConfiguration));
     }
 
     protected Object dereference(Task<?> pTask) {
@@ -114,7 +74,7 @@ public class TaskManagerAndroid implements TaskManager
             lOwnerField.set(pTask, null);
 
             if (lOwner != null) {
-                Object lOwnerId = resolveOwnerId(lOwner);
+                Object lOwnerId = mTaskResolver.resolveOwnerId(lOwner);
                 mTaskOwnersByType.put(lOwnerId, new WeakReference<Object>(lOwner));
                 return lOwnerId;
             } else {
@@ -127,9 +87,10 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
     
-    protected <TResult> TaskContainerAndroid<TResult> buildContainer(Task<TResult> pTask,
-                                                                     TaskConfiguration pConfiguration,
-                                                                     Object pOwnerId) {
+    protected <TResult> TaskContainerAndroid<TResult> buildContainer(Object pOwnerId,
+                                                                     Task<TResult> pTask,
+                                                                     Task.Configuration pConfiguration)
+    {
         if (pTask instanceof TaskIdentity) {
             Object lTaskId = ((TaskIdentity) pTask).getId();
             return new TaskContainerAndroid<TResult>(pTask, pConfiguration, pOwnerId, lTaskId);
@@ -209,31 +170,20 @@ public class TaskManagerAndroid implements TaskManager
         return null;
     }
 
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private Object resolveOwnerId(Object pOwner) {
-        Class<?> lOwnerType = pOwner.getClass();
-        for (TaskRuleMapping lRuleMapping : mRuleMappings) {
-            if (lOwnerType == lRuleMapping.getTargetType()) {
-                return lRuleMapping.getTargetId(pOwner);
-            }
-        }
-        throw InternalException.invalidConfiguration(null); // TODO!!
-    }
-
 
     private class TaskContainerAndroid<TResult> implements Runnable {
         Task<TResult> mTask;
         Object mOwnerId;
 
         Object mTaskId;
-        TaskConfiguration mConfiguration;
+        Task.Configuration mConfiguration;
         
         TResult mResult;
         Throwable mThrowable;
         boolean mProcessed;
         boolean mFinished;
 
-        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pOwnerId, Object pTaskId) {
+        public TaskContainerAndroid(Task<TResult> pTask, Task.Configuration pConfiguration, Object pOwnerId, Object pTaskId) {
             super();
             mTask = pTask;
             mOwnerId = null;
@@ -245,7 +195,7 @@ public class TaskManagerAndroid implements TaskManager
             mFinished = false;
         }
 
-        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pOwnerId) {
+        public TaskContainerAndroid(Task<TResult> pTask, Task.Configuration pConfiguration, Object pOwnerId) {
             super();
             mTask = pTask;
             mOwnerId = null;

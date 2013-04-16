@@ -1,5 +1,6 @@
 package com.codexperiments.robolabor.task;
 
+
 public interface TaskManager
 {
     void manage(Object pOwner);
@@ -11,6 +12,14 @@ public interface TaskManager
     <TResult> boolean listen(TaskResult<TResult> pTaskListener);
 
     void notifyProgress(TaskProgress pProgress);
+    
+
+    public interface Configuration {
+        Object resolveOwnerId(Object pOwner);
+
+        Task.Configuration resolveConfiguration(Task<?> pTask);
+    }
+
 //    
 //    interface TaskBuilder<TResult> {
 //        TaskBuilder<TResult> singleInstance(Object pId);
