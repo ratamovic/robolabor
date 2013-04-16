@@ -6,23 +6,23 @@ public interface TaskManager
     
     void unmanage(Object pOwner);
     
-    <TResult> TaskBuilder<TResult> execute(Task<TResult> pTask);
+    <TResult> void execute(Task<TResult> pTask);
 
-    <TResult> boolean listenPending(TaskResult<TResult> pTaskListener);
+    <TResult> boolean listen(TaskResult<TResult> pTaskListener);
 
     void notifyProgress(TaskProgress pProgress);
-    
-    interface TaskBuilder<TResult> {
-        TaskBuilder<TResult> singleInstance(Object pId);
-        
-        TaskBuilder<TResult> dontKeepResult();
-        
-        TaskBuilder<TResult> keepResultOnHold();
-        
-//        TaskBuilder<TResult> bindToOwner();
-        
-        void inMainQueue();
-        
-        void inBackgroundQueue();
-    }
+//    
+//    interface TaskBuilder<TResult> {
+//        TaskBuilder<TResult> singleInstance(Object pId);
+//        
+//        TaskBuilder<TResult> dontKeepResult();
+//        
+//        TaskBuilder<TResult> keepResultOnHold();
+//        
+////        TaskBuilder<TResult> bindToOwner();
+//        
+//        void inMainQueue();
+//        
+//        void inBackgroundQueue();
+//    }
 }

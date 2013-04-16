@@ -16,14 +16,18 @@ import android.os.Looper;
 
 import com.codexperiments.robolabor.exception.InternalException;
 import com.codexperiments.robolabor.task.Task;
-import com.codexperiments.robolabor.task.TaskRule;
+import com.codexperiments.robolabor.task.TaskConfiguration;
+import com.codexperiments.robolabor.task.TaskIdentity;
+import com.codexperiments.robolabor.task.TaskRuleExecutor;
+import com.codexperiments.robolabor.task.TaskRuleMapping;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.task.TaskResult;
 
 public class TaskManagerAndroid implements TaskManager
 {
-    /*private*/ List<TaskRule<?>> mRules;
+    /*private*/ List<TaskRuleMapping<?>> mRuleMappings;
+    /*private*/ List<TaskRuleExecutor<?>> mRuleExecutors;
     /*private*/ Map<Object, WeakReference<?>> mTaskOwnersByType;
     /*private*/ List<TaskContainerAndroid<?>> mTaskContainers;
 
@@ -34,8 +38,9 @@ public class TaskManagerAndroid implements TaskManager
 
     public TaskManagerAndroid() {
         super();
+        mRuleMappings = new ArrayList<TaskRuleMapping<?>>();
+        mRuleExecutors = new ArrayList<TaskRuleExecutor<?>>();
         mTaskContainers = new LinkedList<TaskContainerAndroid<?>>();
-        mRules = new ArrayList<TaskRule<?>>();
         mTaskOwnersByType = new HashMap<Object, WeakReference<?>>();
         
         mUIQueue = new Handler(Looper.getMainLooper());
@@ -58,76 +63,133 @@ public class TaskManagerAndroid implements TaskManager
     
     @Override
     public void manage(Object pOwner) {
-        mTaskOwnersByType.put(computeId(pOwner), new WeakReference<Object>(pOwner));
+        mTaskOwnersByType.put(resolveOwnerId(pOwner), new WeakReference<Object>(pOwner));
         for (TaskContainerAndroid<?> lTaskContainer : mTaskContainers) {
-            lTaskContainer.finish(false);
+            finish(lTaskContainer, false);
         }
     }
 
     @Override
     public void unmanage(Object pOwner) {
-        WeakReference<?> lWeakRef = mTaskOwnersByType.get(computeId(pOwner));
+        WeakReference<?> lWeakRef = mTaskOwnersByType.get(resolveOwnerId(pOwner));
         if ((lWeakRef != null) && (lWeakRef.get() == pOwner)) {
             lWeakRef.clear();
         }
     }
 
     @Override
-    public <TResult> TaskBuilder<TResult> execute(Task<TResult> pTask) {
-        return new TaskContainerAndroid<TResult>(pTask);
+    public <TResult> void execute(Task<TResult> pTask) {
+        TaskConfiguration lConfiguration = resolveConfiguration(pTask);
+        Object lOwnerId = dereference(pTask);
+        TaskContainerAndroid<TResult> lContainer = buildContainer(pTask, lConfiguration, lOwnerId);
+        
+        lConfiguration.getExecutor().execute(lContainer);
+    }
+
+//    @Override
+//    public <TResult> void execute(Task<TResult> pTask, TaskConfiguration pConfiguration) {
+//        Object lOwnerId = dereference(pTask);
+//        TaskContainerAndroid<TResult> lContainer = buildContainer(pTask, pConfiguration, lOwnerId);
+//        
+//        pConfiguration.getExecutor().execute(lContainer);
+//    }
+    
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private TaskConfiguration resolveConfiguration(Task<?> pTask) {
+        Class<?> lTaskType = pTask.getClass();
+        for (TaskRuleExecutor lRuleExecutor : mRuleExecutors) {
+            if (lTaskType == lRuleExecutor.getTaskType()) {
+                return lRuleExecutor.getConfiguration(pTask);
+            }
+        }
+        throw InternalException.invalidConfiguration(null); // TODO!!
+    }
+
+    protected Object dereference(Task<?> pTask) {
+        // Dereference the outer class to avoid any conflict.
+        try {
+            Field lOwnerField = resolveOwnerField(pTask);
+            // TODO if null if isinnerclass
+            Object lOwner = lOwnerField.get(pTask);
+            lOwnerField.set(pTask, null);
+
+            if (lOwner != null) {
+                Object lOwnerId = resolveOwnerId(lOwner);
+                mTaskOwnersByType.put(lOwnerId, new WeakReference<Object>(lOwner));
+                return lOwnerId;
+            } else {
+                return null;
+            }
+        } catch (IllegalArgumentException eIllegalArgumentException) {
+            throw InternalException.illegalCase();
+        } catch (IllegalAccessException eIllegalAccessException) {
+            throw InternalException.illegalCase();
+        }
+    }
+    
+    protected <TResult> TaskContainerAndroid<TResult> buildContainer(Task<TResult> pTask,
+                                                                     TaskConfiguration pConfiguration,
+                                                                     Object pOwnerId) {
+        if (pTask instanceof TaskIdentity) {
+            Object lTaskId = ((TaskIdentity) pTask).getId();
+            return new TaskContainerAndroid<TResult>(pTask, pConfiguration, pOwnerId, lTaskId);
+        } else {
+            return new TaskContainerAndroid<TResult>(pTask, pConfiguration, pOwnerId);
+        }
     }
 
     @Override
-    public <TResult> boolean listenPending(TaskResult<TResult> pTaskListener) {
+    public <TResult> boolean listen(TaskResult<TResult> pTaskListener) {
         return true;
     }
 
     @Override
     public void notifyProgress(final TaskProgress pProgress) {
         mUIQueue.post(new Runnable() {
-            @Override
             public void run() {
                 pProgress.onProgress();
             }
         });
     }
 
-    protected Object unmap(TaskContainerAndroid<?> pContainer) {
-        Object lOuter = (Object) saveOuterRef(pContainer.mTask);
-        if (lOuter == null) return null;
-        
-        Object lOuterId = computeId(lOuter);
-        mTaskOwnersByType.put(lOuterId, new WeakReference<Object>(lOuter));
-        mMainExecutor.execute(pContainer);
-        return lOuterId;
-    }
-
-    protected boolean map(TaskContainerAndroid<?> pContainer) {
-        WeakReference<?> lOuterRef = mTaskOwnersByType.get(pContainer.mOwnerId);
-        boolean lIsSuccess = restoreOuterRef(pContainer.mTask, lOuterRef.get());
-        mTaskContainers.remove(this);
-        return lIsSuccess;
-    }
-
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    protected Object computeId(Object pOwner) {
-        Class<?> lTargetType = pOwner.getClass();
-        for (TaskRule lRule : mRules) {
-            if (lTargetType == lRule.getTargetType()) {
-                return lRule.getTargetId(pOwner);
+    // On Executor-thread or UI-thread
+    protected <TResult> void finish(final TaskContainerAndroid<TResult> pContainer, final boolean pConfirmProcessed) {
+        if (Thread.currentThread() != mUIThread) {
+            mUIQueue.post(new Runnable() {
+                public void run() {
+                    finish(pContainer, pConfirmProcessed);
+                }
+            });
+        } else {
+            if (pConfirmProcessed) pContainer.mProcessed = true;
+            
+            if (pContainer.mProcessed && !pContainer.mFinished && canFinish(pContainer)) {
+                try {
+                    if (pContainer.mThrowable == null) {
+                        pContainer.mTask.onFinish(pContainer.mResult);
+                    } else {
+                        pContainer.mTask.onError(pContainer.mThrowable);
+                    }
+                } finally {
+                    pContainer.mFinished = true;
+                }
             }
         }
-        throw InternalException.invalidConfiguration(null); // TODO!!
     }
 
-    public Object saveOuterRef(Object pHandler) {
-        // Dereference the outer class to avoid any conflict.
+    protected <TResult> boolean canFinish(TaskContainerAndroid<TResult> pContainer) {
+        WeakReference<?> lOwnerRef = mTaskOwnersByType.get(pContainer.mOwnerId);
         try {
-            Field lOuterRefField = findOuterRefField(pHandler);
-         // TODO if null if isinnerclass
-            Object lOuterRef = lOuterRefField.get(pHandler);
-            lOuterRefField.set(pHandler, null);
-            return lOuterRef;
+            if (lOwnerRef != null || !pContainer.mConfiguration.keepResultOnHold()) {
+                Field lOwnerField = resolveOwnerField(pContainer.mTask);
+                lOwnerField.setAccessible(true);
+                lOwnerField.set(pContainer.mTask, lOwnerRef.get());
+
+                mTaskContainers.remove(this);
+                return true;
+            } else {
+                return false;
+            }
         } catch (IllegalArgumentException eIllegalArgumentException) {
             throw InternalException.illegalCase();
         } catch (IllegalAccessException eIllegalAccessException) {
@@ -135,23 +197,7 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
-    public boolean restoreOuterRef(Object pObject, Object pOuterRef) {
-        // Dereference the outer class to avoid any conflict.
-        try {
-            if (pOuterRef == null) return false;
-            
-            Field lOuterRefField = findOuterRefField(pObject);
-            lOuterRefField.setAccessible(true);
-            lOuterRefField.set(pObject, pOuterRef);
-            return true;
-        } catch (IllegalArgumentException eIllegalArgumentException) {
-            throw InternalException.illegalCase();
-        } catch (IllegalAccessException eIllegalAccessException) {
-            throw InternalException.illegalCase();
-        }
-    }
-
-    private Field findOuterRefField(Object pHandler) {
+    private Field resolveOwnerField(Object pHandler) {
         Field[] lFields = pHandler.getClass().getDeclaredFields();
         for (Field lField : lFields) {
             String lFieldName = lField.getName();
@@ -163,51 +209,52 @@ public class TaskManagerAndroid implements TaskManager
         return null;
     }
 
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private Object resolveOwnerId(Object pOwner) {
+        Class<?> lOwnerType = pOwner.getClass();
+        for (TaskRuleMapping lRuleMapping : mRuleMappings) {
+            if (lOwnerType == lRuleMapping.getTargetType()) {
+                return lRuleMapping.getTargetId(pOwner);
+            }
+        }
+        throw InternalException.invalidConfiguration(null); // TODO!!
+    }
 
-    private class TaskContainerAndroid<TResult> implements TaskBuilder<TResult>, Runnable {
-        /*private*/ Task<TResult> mTask;
-        /*private*/ Object mTaskId;
-        /*private*/ Object mOwnerId;
-        
-        /*private*/ boolean mKeepResultOnHold;
-        
-        /*private*/ TResult mResult;
-        /*private*/ Throwable mThrowable;
-        /*private*/ boolean mProcessed;
-        /*private*/ boolean mFinished;
 
-        public TaskContainerAndroid(Task<TResult> pTask) {
+    private class TaskContainerAndroid<TResult> implements Runnable {
+        Task<TResult> mTask;
+        Object mOwnerId;
+
+        Object mTaskId;
+        TaskConfiguration mConfiguration;
+        
+        TResult mResult;
+        Throwable mThrowable;
+        boolean mProcessed;
+        boolean mFinished;
+
+        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pOwnerId, Object pTaskId) {
             super();
             mTask = pTask;
-            mKeepResultOnHold = true;
+            mOwnerId = null;
+            
+            mTaskId = pTaskId;
+            mConfiguration = pConfiguration;
+
             mProcessed = false;
             mFinished = false;
         }
 
-        public TaskContainerAndroid<TResult> singleInstance(Object pTaskId) {
-            mTaskId = pTaskId;
-            return this;
-        }
+        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pOwnerId) {
+            super();
+            mTask = pTask;
+            mOwnerId = null;
+            
+            mTaskId = null;
+            mConfiguration = pConfiguration;
 
-        @Override
-        public TaskContainerAndroid<TResult> dontKeepResult() {
-            mKeepResultOnHold = false;
-            return this;
-        }
-
-        @Override
-        public TaskContainerAndroid<TResult> keepResultOnHold() {
-            mKeepResultOnHold = true;
-            return this;
-        }
-
-        @Override
-        public void inMainQueue() {
-            mOwnerId = unmap(this);
-        }
-
-        @Override
-        public void inBackgroundQueue() {
+            mProcessed = false;
+            mFinished = false;
         }
 
         // On Executor-thread
@@ -217,33 +264,7 @@ public class TaskManagerAndroid implements TaskManager
             } catch (final Exception eException) {
                 mThrowable = eException;
             } finally {
-                finish(true);
-            }
-        }
-
-        // On Executor-thread or UI-thread
-        protected void finish(final boolean pConfirmProcessed) {
-            if (Thread.currentThread() != mUIThread) {
-                mUIQueue.post(new Runnable() {
-                    public void run() {
-                        finish(pConfirmProcessed);
-                    }
-                });
-            } else {
-                if (pConfirmProcessed) mProcessed = true;
-                if (mFinished || !mProcessed) return;
-                
-                if (map(this) || !mKeepResultOnHold) {
-                    try {
-                        if (mThrowable == null) {
-                            mTask.onFinish(mResult);
-                        } else {
-                            mTask.onError(mThrowable);
-                        }
-                    } finally {
-                        mFinished = true;
-                    }
-                }
+                finish(this, true);
             }
         }
 

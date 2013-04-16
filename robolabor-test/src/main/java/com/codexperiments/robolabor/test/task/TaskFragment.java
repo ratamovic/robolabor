@@ -107,7 +107,7 @@ public class TaskFragment extends Fragment {
             public void onError(Throwable pThrowable) {
                 mTaskException = pThrowable;
             }
-        }).dontKeepResult().inMainQueue();
+        }); // .dontKeepResult().inMainQueue();
         return taskFinished;
     }
 
