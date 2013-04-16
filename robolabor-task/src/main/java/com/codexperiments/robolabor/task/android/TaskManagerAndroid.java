@@ -145,7 +145,7 @@ public class TaskManagerAndroid implements TaskManager
         try {
             if (lOwnerRef != null || !pContainer.mConfiguration.keepResultOnHold()) {
                 Field lOwnerField = resolveOwnerField(pContainer.mTask);
-                lOwnerField.setAccessible(true);
+                // TODO Check null
                 lOwnerField.set(pContainer.mTask, lOwnerRef.get());
 
                 mTaskContainers.remove(this);
