@@ -6,9 +6,14 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 
+import android.app.Activity;
 import android.os.Handler;
 import android.os.Looper;
+import android.support.v4.app.Fragment;
 
 import com.codexperiments.robolabor.exception.InternalException;
 import com.codexperiments.robolabor.task.Task;
@@ -19,7 +24,7 @@ import com.codexperiments.robolabor.task.TaskResult;
 
 public class TaskManagerAndroid implements TaskManager
 {
-    private TaskManager.Configuration mTaskResolver;
+    private Configuration mTaskResolver;
     private Map<Object, WeakReference<?>> mTaskOwnersByType;
     private List<TaskContainerAndroid<?>> mTaskContainers;
 
@@ -27,7 +32,7 @@ public class TaskManagerAndroid implements TaskManager
     private Thread mUIThread;
 
 
-    public TaskManagerAndroid(TaskManager.Configuration pTaskResolver) {
+    public TaskManagerAndroid(Configuration pTaskResolver) {
         super();
         mTaskResolver = pTaskResolver;
         mTaskContainers = new LinkedList<TaskContainerAndroid<?>>();
@@ -61,27 +66,30 @@ public class TaskManagerAndroid implements TaskManager
 
     @Override
     public <TResult> void execute(Task<TResult> pTask) {
-        Task.Configuration lConfiguration = mTaskResolver.resolveConfiguration(pTask);
+        TaskConfiguration lConfiguration = mTaskResolver.resolveConfiguration(pTask);
         Object lOwnerId = dereferenceOwner(pTask);
         TaskContainerAndroid<TResult> lContainer = makeContainer(lOwnerId, pTask, lConfiguration);
         lConfiguration.getExecutor().execute(lContainer);
     }
 
     protected Object dereferenceOwner(Task<?> pTask) {
-        // Dereference the outer class to avoid any conflict.
         try {
+            // TODO Handle the case of non-inner classes.
             Field lOwnerField = resolveOwnerField(pTask);
-            // TODO if null if isinnerclass
-            Object lOwner = lOwnerField.get(pTask);
-            lOwnerField.set(pTask, null);
+            if (lOwnerField != null) {
+                // Dereference the outer class to avoid any conflict.
+                Object lOwner = lOwnerField.get(pTask);
+                lOwnerField.set(pTask, null);
 
-            if (lOwner != null) {
-                Object lOwnerId = mTaskResolver.resolveOwnerId(lOwner);
-                mTaskOwnersByType.put(lOwnerId, new WeakReference<Object>(lOwner));
-                return lOwnerId;
-            } else {
-                return null;
+                if (lOwner != null) {
+                    Object lOwnerId = mTaskResolver.resolveOwnerId(lOwner);
+                    if (lOwnerId != null) {
+                        mTaskOwnersByType.put(lOwnerId, new WeakReference<Object>(lOwner));
+                        return lOwnerId;
+                    }
+                }
             }
+            return null;
         } catch (IllegalArgumentException eIllegalArgumentException) {
             throw InternalException.illegalCase();
         } catch (IllegalAccessException eIllegalAccessException) {
@@ -91,7 +99,7 @@ public class TaskManagerAndroid implements TaskManager
     
     protected <TResult> TaskContainerAndroid<TResult> makeContainer(Object pOwnerId,
                                                                     Task<TResult> pTask,
-                                                                    Task.Configuration pConfiguration)
+                                                                    TaskConfiguration pConfiguration)
     {
         if (pTask instanceof TaskIdentity) {
             Object lTaskId = ((TaskIdentity) pTask).getId();
@@ -141,18 +149,20 @@ public class TaskManagerAndroid implements TaskManager
     }
 
     protected <TResult> boolean referenceOwner(TaskContainerAndroid<TResult> pContainer) {
-        WeakReference<?> lOwnerRef = mTaskOwnersByType.get(pContainer.mOwnerId);
         try {
-            if (lOwnerRef != null || !pContainer.mConfiguration.keepResultOnHold()) {
-                Field lOwnerField = resolveOwnerField(pContainer.mTask);
-                // TODO Check null
-                lOwnerField.set(pContainer.mTask, lOwnerRef.get());
-
-                mTaskContainers.remove(this);
-                return true;
-            } else {
-                return false;
+            // TODO Handle the case of non-inner classes.
+            if (pContainer.mOwnerId != null) {
+                WeakReference<?> lOwnerRef = mTaskOwnersByType.get(pContainer.mOwnerId);
+                if (lOwnerRef != null || !pContainer.mConfiguration.keepResultOnHold()) {
+                    Field lOwnerField = resolveOwnerField(pContainer.mTask);
+                    if (lOwnerField != null) {
+                        lOwnerField.set(pContainer.mTask, lOwnerRef.get());
+                        mTaskContainers.remove(this);
+                        return true;
+                    }
+                }
             }
+            return false;
         } catch (IllegalArgumentException eIllegalArgumentException) {
             throw InternalException.illegalCase();
         } catch (IllegalAccessException eIllegalAccessException) {
@@ -173,19 +183,20 @@ public class TaskManagerAndroid implements TaskManager
     }
 
 
+
     private class TaskContainerAndroid<TResult> implements Runnable {
         Task<TResult> mTask;
         Object mOwnerId;
 
         Object mTaskId;
-        Task.Configuration mConfiguration;
+        TaskConfiguration mConfiguration;
         
         TResult mResult;
         Throwable mThrowable;
         boolean mProcessed;
         boolean mFinished;
 
-        public TaskContainerAndroid(Task<TResult> pTask, Task.Configuration pConfiguration, Object pOwnerId, Object pTaskId) {
+        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pOwnerId, Object pTaskId) {
             super();
             mTask = pTask;
             mOwnerId = null;
@@ -197,7 +208,7 @@ public class TaskManagerAndroid implements TaskManager
             mFinished = false;
         }
 
-        public TaskContainerAndroid(Task<TResult> pTask, Task.Configuration pConfiguration, Object pOwnerId) {
+        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pOwnerId) {
             super();
             mTask = pTask;
             mOwnerId = null;
@@ -236,6 +247,87 @@ public class TaskManagerAndroid implements TaskManager
             } else {
                 return super.hashCode();
             }
+        }
+    }
+
+
+
+    public interface Configuration {
+        Object resolveOwnerId(Object pOwner);
+
+        TaskConfiguration resolveConfiguration(Task<?> pTask);
+    }
+
+    public interface TaskConfiguration {
+        ExecutorService getExecutor();
+
+        boolean keepResultOnHold();
+    }
+
+
+    public static class DefaultConfiguration implements Configuration {
+        /*private*/ ExecutorService mSerialExecutor;
+        
+        /**
+         * To execute tasks one by one in the order they were submitted, like a queue. This emulates the AsyncTask behavior used since
+         * Android Gingerbread.
+         */
+        protected TaskConfiguration mSerialConfiguration = new TaskConfiguration() {
+            @Override
+            public boolean keepResultOnHold() {
+                return true;
+            }
+            
+            @Override
+            public ExecutorService getExecutor() {
+                return mSerialExecutor;
+            }
+        };
+        
+        public DefaultConfiguration() {
+            super();
+            mSerialExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+                public Thread newThread(Runnable pRunnable) {
+                    Thread thread = new Thread(pRunnable);
+                    thread.setDaemon(true);
+                    return thread;
+                }
+            });
+        }
+
+        @Override
+        public Object resolveOwnerId(Object pOwner) {
+            
+            if (pOwner instanceof Activity) {
+                return resolveActivityId((Activity) pOwner);
+            } else if (pOwner instanceof Fragment) {
+                return resolveFragmentId((Fragment) pOwner);
+            }
+            return resolveDefaultId(pOwner);
+        }
+        
+        protected Object resolveActivityId(Activity pActivity) {
+            return pActivity.getClass();
+        }
+        
+        protected Object resolveFragmentId(Fragment pFragment) {
+            if (pFragment.getId() > 0) {
+                // TODO An Integer Id is not something unique. Need to append the class type too.
+                return pFragment.getId();
+            } else if (pFragment.getTag() != null && !pFragment.getTag().isEmpty()) {
+                return pFragment.getTag();
+            } else {
+                return pFragment.getClass();
+            }
+        }
+        
+        protected Object resolveDefaultId(Object pOwner) {
+            return pOwner.getClass();
+        }
+
+        @Override
+        public TaskConfiguration resolveConfiguration(Task<?> pTask) {
+            return mSerialConfiguration;
         }
     }
 }

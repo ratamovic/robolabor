@@ -26,7 +26,7 @@ public class TaskManagerFragmentTest extends TestCase<TaskFragment.Activity> {
     @Override
     protected void setUpOnUIThread() throws Exception {
         super.setUpOnUIThread();
-        TaskManagerAndroid lTaskManager = new TaskManagerAndroid();
+        TaskManagerAndroid lTaskManager = new TaskManagerAndroid(new TaskManagerAndroid.DefaultConfiguration());
         mApplicationContext.registerManager(lTaskManager);
     }
 
