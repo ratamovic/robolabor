@@ -26,6 +26,7 @@ import com.codexperiments.robolabor.task.TaskResult;
  * TODO Handle timeout.
  * TODO Handle cancellation.
  * TODO Handle progress.
+ * TODO Handle non-inner classes.
  */
 public class TaskManagerAndroid implements TaskManager
 {
@@ -232,8 +233,13 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
-    private Field resolveEmitterField(Object pHandler) {
-        Field[] lFields = pHandler.getClass().getDeclaredFields();
+    /**
+     * Locate the outer object reference Field (e.g. this$0) inside the inner class.
+     * @param pTask Object on which the field must be located.
+     * @return Field pointing to the outer object or null if pTask is not an inner-class.
+     */
+    private Field resolveEmitterField(Object pTask) {
+        Field[] lFields = pTask.getClass().getDeclaredFields();
         for (Field lField : lFields) {
             String lFieldName = lField.getName();
             if (lFieldName.startsWith("this$")) {
@@ -331,27 +337,40 @@ public class TaskManagerAndroid implements TaskManager
      * Example configuration that handles basic Android components: Activity and Fragments.
      */
     public static class DefaultConfiguration implements Configuration {
-        /*private*/ ExecutorService mSerialExecutor;
-        
         /**
          * Task configuration to execute tasks one by one in the order they were submitted, like a queue. This emulates the
          * AsyncTask behavior used since Android Gingerbread.
          */
-        protected TaskConfiguration mSerialConfiguration = new TaskConfiguration() {
-            @Override
-            public boolean keepResultOnHold() {
-                return true;
-            }
-            
-            @Override
-            public ExecutorService getExecutor() {
-                return mSerialExecutor;
-            }
-        };
+        protected TaskConfiguration mSerialConfiguration = buildTaskConfiguration();
         
-        public DefaultConfiguration() {
-            super();
-            mSerialExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+        /**
+         * Create an instance of the executor used to execute tasks. Returned executor is single-threaded and executes tasks
+         * sequentially.
+         * @return Instance of the serial executor.
+         */
+        protected TaskConfiguration buildTaskConfiguration() {
+            return new TaskConfiguration() {
+                /*private*/ ExecutorService mSerialExecutor = buildExecutor();
+                
+                @Override
+                public boolean keepResultOnHold() {
+                    return true;
+                }
+                
+                @Override
+                public ExecutorService getExecutor() {
+                    return mSerialExecutor;
+                }
+            };
+        }
+        
+        /**
+         * Create an instance of the executor used to execute tasks. Returned executor is single-threaded and executes tasks
+         * sequentially. This method is called by buildTaskConfiguration() to initialize TaskConfiguration object.
+         * @return Instance of the serial executor.
+         */
+        protected ExecutorService buildExecutor() {
+            return Executors.newSingleThreadExecutor(new ThreadFactory() {
                 public Thread newThread(Runnable pRunnable) {
                     Thread thread = new Thread(pRunnable);
                     thread.setDaemon(true);
