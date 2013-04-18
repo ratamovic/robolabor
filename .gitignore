@@ -1,8 +1,9 @@
 # Eclipse
+.metadata/
 .classpath
 .settings
-.metadata/
 .project
+target
 
 # built application files
 *.apk

@@ -22,21 +22,27 @@ import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.task.TaskResult;
 
+/**
+ * TODO Handle timeout.
+ * TODO Handle cancellation.
+ * TODO Handle progress.
+ */
 public class TaskManagerAndroid implements TaskManager
 {
-    private Configuration mTaskResolver;
-    private Map<Object, WeakReference<?>> mTaskOwnersByType;
-    private List<TaskContainerAndroid<?>> mTaskContainers;
+    private Configuration mConfig;
+    // TODO Use concurrent collections.
+    private List<TaskContainerAndroid<?>> mContainers;
+    private Map<Object, WeakReference<?>> mEmittersByType;
 
     private Handler mUIQueue;
     private Thread mUIThread;
 
 
-    public TaskManagerAndroid(Configuration pTaskResolver) {
+    public TaskManagerAndroid(Configuration pConfig) {
         super();
-        mTaskResolver = pTaskResolver;
-        mTaskContainers = new LinkedList<TaskContainerAndroid<?>>();
-        mTaskOwnersByType = new HashMap<Object, WeakReference<?>>();
+        mConfig = pConfig;
+        mContainers = new LinkedList<TaskContainerAndroid<?>>();
+        mEmittersByType = new HashMap<Object, WeakReference<?>>();
         
         mUIQueue = new Handler(Looper.getMainLooper());
         mUIThread = mUIQueue.getLooper().getThread();
@@ -49,47 +55,66 @@ public class TaskManagerAndroid implements TaskManager
     }
     
     @Override
-    public void manage(Object pOwner) {
-        mTaskOwnersByType.put(mTaskResolver.resolveOwnerId(pOwner), new WeakReference<Object>(pOwner));
-        for (TaskContainerAndroid<?> lTaskContainer : mTaskContainers) {
-            finish(lTaskContainer, false);
+    public void manage(Object pEmitter) {
+        // Save the new task emitter in the reference list. Replace the existing one if any according to its id (the old one is
+        // considered obsolete). Emitter Id is computed by the configuration strategy. See DefaultConfiguration for an example.
+        // Note that an emitter Id can be null if no emitter dereferencement should be applied.
+        Object lEmitterId = mConfig.resolveEmitterId(pEmitter);
+        if (lEmitterId != null) {
+            mEmittersByType.put(lEmitterId, new WeakReference<Object>(pEmitter));
+            for (TaskContainerAndroid<?> lTaskContainer : mContainers) {
+                finish(lTaskContainer, false);
+            }
         }
     }
 
     @Override
-    public void unmanage(Object pOwner) {
-        WeakReference<?> lWeakRef = mTaskOwnersByType.get(mTaskResolver.resolveOwnerId(pOwner));
-        if ((lWeakRef != null) && (lWeakRef.get() == pOwner)) {
-            lWeakRef.clear();
+    public void unmanage(Object pEmitter) {
+        // Remove an existing task emitter. If the emitter reference (in Java terms) is different from the object to remove, then
+        // don't do anything. This could occur if a new object is managed before an older one with the same Id is unmanaged.
+        // Typically, this could occur for example if an Activity X starts and then navigates to an Activity B which is,
+        // according to Android lifecycle, started before A is stopped (the two activities are alive at the same time during a
+        // short period of time).
+        // Note that an emitter Id can be null if a task is not an inner class and thus has no outer class.
+        Object lEmitterId = mConfig.resolveEmitterId(pEmitter);
+        if (lEmitterId != null) {
+            WeakReference<?> lWeakRef = mEmittersByType.get(lEmitterId);
+            if ((lWeakRef != null) && (lWeakRef.get() == pEmitter)) {
+                mEmittersByType.remove(lEmitterId);
+            }
         }
     }
 
     @Override
     public <TResult> void execute(Task<TResult> pTask) {
-        TaskConfiguration lConfiguration = mTaskResolver.resolveConfiguration(pTask);
-        Object lOwnerId = dereferenceOwner(pTask);
-        TaskContainerAndroid<TResult> lContainer = makeContainer(lOwnerId, pTask, lConfiguration);
-        lConfiguration.getExecutor().execute(lContainer);
+        TaskConfiguration lTaskConfig = mConfig.resolveConfiguration(pTask);
+        // Note that an emitter Id can be null if a task is not an inner class or if no dereferencement should be applied.
+        Object lEmitterId = dereferenceEmitter(pTask);
+        TaskContainerAndroid<TResult> lContainer = makeContainer(lEmitterId, pTask, lTaskConfig);
+        lTaskConfig.getExecutor().execute(lContainer);
     }
 
-    protected Object dereferenceOwner(Task<?> pTask) {
+    /**
+     * Dereference the emitter (which is an outer class) from the task (which is an inner class) and return its Id. Emitter
+     * references are stored internally so that they can be restored later when the task has finished its computation.
+     * @param pTask Task to dereference.
+     * @return Id of the emitter.
+     */
+    protected Object dereferenceEmitter(Task<?> pTask) {
         try {
-            // TODO Handle the case of non-inner classes.
-            Field lOwnerField = resolveOwnerField(pTask);
-            if (lOwnerField != null) {
-                // Dereference the outer class to avoid any conflict.
-                Object lOwner = lOwnerField.get(pTask);
-                lOwnerField.set(pTask, null);
+            Field lEmitterField = resolveEmitterField(pTask);
+            if (lEmitterField == null) return null;
+            Object lEmitter = lEmitterField.get(pTask);
+            if (lEmitter == null) return null;
+            Object lEmitterId = mConfig.resolveEmitterId(lEmitter);
+            if (lEmitterId == null) return null;
 
-                if (lOwner != null) {
-                    Object lOwnerId = mTaskResolver.resolveOwnerId(lOwner);
-                    if (lOwnerId != null) {
-                        mTaskOwnersByType.put(lOwnerId, new WeakReference<Object>(lOwner));
-                        return lOwnerId;
-                    }
-                }
-            }
-            return null;
+            // Dereference the outer emitter.
+            lEmitterField.set(pTask, null);
+            // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
+            // collector do its job.
+            mEmittersByType.put(lEmitterId, new WeakReference<Object>(lEmitter));
+            return lEmitterId;
         } catch (IllegalArgumentException eIllegalArgumentException) {
             throw InternalException.illegalCase();
         } catch (IllegalAccessException eIllegalAccessException) {
@@ -97,16 +122,25 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
     
-    protected <TResult> TaskContainerAndroid<TResult> makeContainer(Object pOwnerId,
+    /**
+     * Factory method that creates a container that runs the specified background task.
+     * @param pEmitterId Id of the object that emitted the task.
+     * @param pTask Task to execute.
+     * @param pConfig Configuration of the task.
+     * @return The task container.
+     */
+    protected <TResult> TaskContainerAndroid<TResult> makeContainer(Object pEmitterId,
                                                                     Task<TResult> pTask,
-                                                                    TaskConfiguration pConfiguration)
-    {
+                                                                    TaskConfiguration pConfig) {
+        TaskContainerAndroid<TResult> lTaskContainer;
         if (pTask instanceof TaskIdentity) {
             Object lTaskId = ((TaskIdentity) pTask).getId();
-            return new TaskContainerAndroid<TResult>(pTask, pConfiguration, pOwnerId, lTaskId);
+            lTaskContainer = new TaskContainerAndroid<TResult>(pTask, pConfig, pEmitterId, lTaskId);
         } else {
-            return new TaskContainerAndroid<TResult>(pTask, pConfiguration, pOwnerId);
+            lTaskContainer = new TaskContainerAndroid<TResult>(pTask, pConfig, pEmitterId);
         }
+        mContainers.add(lTaskContainer);
+        return lTaskContainer;
     }
 
     @Override
@@ -116,14 +150,22 @@ public class TaskManagerAndroid implements TaskManager
 
     @Override
     public void notifyProgress(final TaskProgress pProgress) {
+        // Progress is always executed on the UI Thread.
         mUIQueue.post(new Runnable() {
             public void run() {
+                // TODO Restore reference during onProgress.
                 pProgress.onProgress();
             }
         });
     }
 
-    // On Executor-thread or UI-thread
+    /**
+     * Called when task computation has ended. It restores emitters reference if applicable and triggers the right task callbacks.
+     * Triggers are executed on the UI Thread.
+     * @param pContainer Container that contains the finished task.
+     * @param pConfirmProcessed True to indicate that the task has finished its computation or False if we don't know. This
+     *        parameter should be set to true only from the computation thread after onProcess(), when we know for task is over.
+     */
     protected <TResult> void finish(final TaskContainerAndroid<TResult> pContainer, final boolean pConfirmProcessed) {
         if (Thread.currentThread() != mUIThread) {
             mUIQueue.post(new Runnable() {
@@ -132,15 +174,29 @@ public class TaskManagerAndroid implements TaskManager
                 }
             });
         } else {
+            // If we know for sure the task is finished, set the corresponding flag. That way, finish() can be called at any time:
+            // - When task isn't finished yet, in which case nothing happens. This can occur if a new instance of the emitter
+            // becomes managed while task is still executing: the task manager try to call finish on all tasks.
+            // - When task has just finished, i.e. finish is called from the computation thread, and its emitter is available. In
+            // this case, the flag is set to true and task final callback is triggered.
+            // - When task has just finished but its emitter is not available yet, i.e. it has been unmanaged. In this case, the
+            // flag is set to true but task final callback is NOT triggered. it will be triggered later when a new emitter (with
+            // the same Id) becomes managed.
+            // - When an emitter with the same Id as the previously managed-then-unmanaged one becomes managed. In this case the
+            // flag is already true but the final task callback may have not been called yet (i.e. if mFinished is false). This
+            // can be done now. Note hat it is possible to have finish() called several times since there may be a delay between
+            // finish() call and execution as it is posted on the UI Thread.  
             if (pConfirmProcessed) pContainer.mProcessed = true;
             
-            if (pContainer.mProcessed && !pContainer.mFinished && referenceOwner(pContainer)) {
+            if (pContainer.mProcessed && !pContainer.mFinished && referenceEmitter(pContainer)) {
                 try {
                     if (pContainer.mThrowable == null) {
                         pContainer.mTask.onFinish(pContainer.mResult);
                     } else {
                         pContainer.mTask.onError(pContainer.mThrowable);
                     }
+                } catch (Exception eException) {
+                    pContainer.mTask.onError(eException);
                 } finally {
                     pContainer.mFinished = true;
                 }
@@ -148,16 +204,22 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
-    protected <TResult> boolean referenceOwner(TaskContainerAndroid<TResult> pContainer) {
+    /**
+     * Restore the emitter back into the task.
+     * @param pContainer Container that contains the task to restore.
+     * @return True if restoration could be performed properly. This may be false if a previously managed object become unmanaged
+     *         meanwhile.
+     */
+    protected <TResult> boolean referenceEmitter(TaskContainerAndroid<TResult> pContainer) {
         try {
             // TODO Handle the case of non-inner classes.
-            if (pContainer.mOwnerId != null) {
-                WeakReference<?> lOwnerRef = mTaskOwnersByType.get(pContainer.mOwnerId);
-                if (lOwnerRef != null || !pContainer.mConfiguration.keepResultOnHold()) {
-                    Field lOwnerField = resolveOwnerField(pContainer.mTask);
-                    if (lOwnerField != null) {
-                        lOwnerField.set(pContainer.mTask, lOwnerRef.get());
-                        mTaskContainers.remove(this);
+            if (pContainer.mEmitterId != null) {
+                WeakReference<?> lEmitterRef = mEmittersByType.get(pContainer.mEmitterId);
+                if (lEmitterRef != null || !pContainer.mConfig.keepResultOnHold()) {
+                    Field lEmitterField = resolveEmitterField(pContainer.mTask);
+                    if (lEmitterField != null) {
+                        lEmitterField.set(pContainer.mTask, lEmitterRef.get());
+                        mContainers.remove(this);
                         return true;
                     }
                 }
@@ -170,7 +232,7 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
-    private Field resolveOwnerField(Object pHandler) {
+    private Field resolveEmitterField(Object pHandler) {
         Field[] lFields = pHandler.getClass().getDeclaredFields();
         for (Field lField : lFields) {
             String lFieldName = lField.getName();
@@ -186,35 +248,35 @@ public class TaskManagerAndroid implements TaskManager
 
     private class TaskContainerAndroid<TResult> implements Runnable {
         Task<TResult> mTask;
-        Object mOwnerId;
+        Object mEmitterId;
 
         Object mTaskId;
-        TaskConfiguration mConfiguration;
+        TaskConfiguration mConfig;
         
         TResult mResult;
         Throwable mThrowable;
         boolean mProcessed;
         boolean mFinished;
 
-        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pOwnerId, Object pTaskId) {
+        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfig, Object pEmitterId, Object pTaskId) {
             super();
             mTask = pTask;
-            mOwnerId = null;
+            mEmitterId = pEmitterId;
             
             mTaskId = pTaskId;
-            mConfiguration = pConfiguration;
+            mConfig = pConfig;
 
             mProcessed = false;
             mFinished = false;
         }
 
-        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pOwnerId) {
+        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pConfiguration, Object pEmitterId) {
             super();
             mTask = pTask;
-            mOwnerId = null;
+            mEmitterId = pEmitterId;
             
             mTaskId = null;
-            mConfiguration = pConfiguration;
+            mConfig = pConfiguration;
 
             mProcessed = false;
             mFinished = false;
@@ -253,7 +315,7 @@ public class TaskManagerAndroid implements TaskManager
 
 
     public interface Configuration {
-        Object resolveOwnerId(Object pOwner);
+        Object resolveEmitterId(Object pEmitter);
 
         TaskConfiguration resolveConfiguration(Task<?> pTask);
     }
@@ -265,12 +327,15 @@ public class TaskManagerAndroid implements TaskManager
     }
 
 
+    /**
+     * Example configuration that handles basic Android components: Activity and Fragments.
+     */
     public static class DefaultConfiguration implements Configuration {
         /*private*/ ExecutorService mSerialExecutor;
         
         /**
-         * To execute tasks one by one in the order they were submitted, like a queue. This emulates the AsyncTask behavior used since
-         * Android Gingerbread.
+         * Task configuration to execute tasks one by one in the order they were submitted, like a queue. This emulates the
+         * AsyncTask behavior used since Android Gingerbread.
          */
         protected TaskConfiguration mSerialConfiguration = new TaskConfiguration() {
             @Override
@@ -296,20 +361,35 @@ public class TaskManagerAndroid implements TaskManager
         }
 
         @Override
-        public Object resolveOwnerId(Object pOwner) {
+        public Object resolveEmitterId(Object pEmitter) {
             
-            if (pOwner instanceof Activity) {
-                return resolveActivityId((Activity) pOwner);
-            } else if (pOwner instanceof Fragment) {
-                return resolveFragmentId((Fragment) pOwner);
+            if (pEmitter instanceof Activity) {
+                return resolveActivityId((Activity) pEmitter);
+            } else if (pEmitter instanceof Fragment) {
+                return resolveFragmentId((Fragment) pEmitter);
             }
-            return resolveDefaultId(pOwner);
+            return resolveDefaultId(pEmitter);
         }
-        
+
+        /**
+         * Typically, an Android Activity is identified by its class type: if we start a task X in an activity of type A, navigate
+         * to an Activity of type B and finally go back to an activity of type A (which could have been recreated meanwhile), then
+         * we want any pending task emitted by the 1st Activity A to be attached again to any further Activity of the same type.
+         * 
+         * @param pActivity Activity to find the Id of.
+         * @return Activity class.
+         */
         protected Object resolveActivityId(Activity pActivity) {
             return pActivity.getClass();
         }
         
+        /**
+         * Typically, an Android Fragment is identified either by an Id (the Id of the component it is inserted in) or a Tag (
+         * which is a String).If none of these elements is available, then 
+         * 
+         * @param pFragment Fragment to find the Id of.
+         * @return Fragment Id if not 0, Fragment Tag if not empty or else its Fragment class.
+         */
         protected Object resolveFragmentId(Fragment pFragment) {
             if (pFragment.getId() > 0) {
                 // TODO An Integer Id is not something unique. Need to append the class type too.
@@ -321,8 +401,14 @@ public class TaskManagerAndroid implements TaskManager
             }
         }
         
-        protected Object resolveDefaultId(Object pOwner) {
-            return pOwner.getClass();
+        /**
+         * If no information is available, the emitter class is used by default as an Id.
+         * 
+         * @param pEmitter Emitter to find the Id of.
+         * @return Emitter class.
+         */
+        protected Object resolveDefaultId(Object pEmitter) {
+            return pEmitter.getClass();
         }
 
         @Override

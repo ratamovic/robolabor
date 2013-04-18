@@ -3,9 +3,9 @@ package com.codexperiments.robolabor.task;
 
 public interface TaskManager
 {
-    void manage(Object pOwner);
+    void manage(Object pEmitter);
     
-    void unmanage(Object pOwner);
+    void unmanage(Object pEmitter);
     
     <TResult> void execute(Task<TResult> pTask);
 
