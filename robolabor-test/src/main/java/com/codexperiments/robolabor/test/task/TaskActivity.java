@@ -69,7 +69,7 @@ public class TaskActivity extends Activity {
         final boolean lCheckActivityNull = getIntent().getBooleanExtra("CheckActivityNull", false);
         
         mTaskManager.execute(new TaskProgress<Integer>() {
-            public Integer onProcess(TaskManagerProgress pTaskManager) throws Exception {
+            public Integer onProcess(TaskManager pTaskManager) throws Exception {
                 pTaskManager.notifyProgress();
                 Thread.sleep(TASK_DURATION);
                 return pTaskResult;
