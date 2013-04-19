@@ -7,5 +7,5 @@ public interface Task<TResult> extends TaskResult<TResult>
      * @throws Exception Si une erreur quelconque survient, alors celle-ci est renvoyé au
      *             gestionnaire onError.
      */
-    TResult onProcess() throws Exception;
+    TResult onProcess(TaskManager pTaskManager) throws Exception;
 }

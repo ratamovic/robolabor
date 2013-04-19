@@ -86,29 +86,29 @@ public class TaskFragment extends Fragment {
     }
 
     public CountDownLatch runTask(final Integer pTaskResult) {
-        final CountDownLatch taskFinished = new CountDownLatch(1);
+        final CountDownLatch lTaskFinished = new CountDownLatch(1);
         final boolean lCheckFragmentNull = getArguments().getBoolean("CheckFragmentNull", false);
         
         mTaskManager.execute(new Task<Integer>() {
-            public Integer onProcess() throws Exception {
+            public Integer onProcess(TaskManager pTaskManager) throws Exception {
                 Thread.sleep(TASK_DURATION);
                 return pTaskResult;
             }
 
-            public void onFinish(Integer pTaskResult) {
+            public void onFinish(TaskManager pTaskManager, Integer pTaskResult) {
                 if (lCheckFragmentNull) {
                     assertThat(TaskFragment.this, nullValue());
                 } else if (TaskFragment.this != null) {
                     mTaskResult = pTaskResult;
                 }
-                taskFinished.countDown();
+                lTaskFinished.countDown();
             }
 
-            public void onError(Throwable pThrowable) {
+            public void onError(TaskManager pTaskManager, Throwable pThrowable) {
                 mTaskException = pThrowable;
             }
         }); // .dontKeepResult().inMainQueue();
-        return taskFinished;
+        return lTaskFinished;
     }
 
     public Integer getTaskResult() {

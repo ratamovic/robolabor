@@ -9,8 +9,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 
-import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManager;
+import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.ApplicationContext;
 import com.codexperiments.robolabor.test.common.TestApplication;
@@ -65,29 +65,33 @@ public class TaskActivity extends Activity {
     }
 
     public CountDownLatch runTask(final Integer pTaskResult) {
-        final CountDownLatch taskFinished = new CountDownLatch(1);
+        final CountDownLatch lTaskFinished = new CountDownLatch(1);
         final boolean lCheckActivityNull = getIntent().getBooleanExtra("CheckActivityNull", false);
         
-        mTaskManager.execute(new Task<Integer>() {
-            public Integer onProcess() throws Exception {
+        mTaskManager.execute(new TaskProgress<Integer>() {
+            public Integer onProcess(TaskManagerProgress pTaskManager) throws Exception {
+                pTaskManager.notifyProgress();
                 Thread.sleep(TASK_DURATION);
                 return pTaskResult;
             }
 
-            public void onFinish(Integer pTaskResult) {
+            public void onProgress(TaskManager pTaskManager) {
+            }
+
+            public void onFinish(TaskManager pTaskManager, Integer pTaskResult) {
                 if (lCheckActivityNull) {
                     assertThat(TaskActivity.this, nullValue());
                 } else if (TaskActivity.this != null) {
                     mTaskResult = pTaskResult;
                 }
-                taskFinished.countDown();
+                lTaskFinished.countDown();
             }
 
-            public void onError(Throwable pThrowable) {
+            public void onError(TaskManager pTaskManager, Throwable pThrowable) {
                 mTaskException = pThrowable;
             }
         }); // .dontKeepResult().inMainQueue()
-        return taskFinished;
+        return lTaskFinished;
     }
 
     public Integer getTaskResult() {

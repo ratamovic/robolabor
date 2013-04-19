@@ -7,12 +7,12 @@ public interface TaskResult<TResult>
      * thread UI. C'est ici que doivent être modifiés les objets liés à l'UI (ex: fusion des
      * résultats de la tâche avec les résultats déjà affichés).
      */
-    void onFinish(TResult pResult);
+    void onFinish(TaskManager pTaskManager, TResult pResult);
 
     /**
      * Si l'exécution de onProgress() échoue, onError() est alors appelé sur le thread UI. Tout
      * message d'erreur ou modification/effacement des données affichées dans l'UI doivent être
      * réalisé ici.
      */
-    void onError(Throwable pThrowable);
+    void onError(TaskManager pTaskManager, Throwable pThrowable);
 }

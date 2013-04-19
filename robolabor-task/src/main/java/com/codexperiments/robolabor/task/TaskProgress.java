@@ -1,6 +1,6 @@
 package com.codexperiments.robolabor.task;
 
-public interface TaskProgress
+public interface TaskProgress<TResult> extends Task<TResult>
 {
-    void onProgress();
+    void onProgress(TaskManager pTaskManager);
 }

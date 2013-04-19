@@ -19,7 +19,6 @@ import com.codexperiments.robolabor.exception.InternalException;
 import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskIdentity;
 import com.codexperiments.robolabor.task.TaskManager;
-import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.task.TaskResult;
 
 /**
@@ -27,13 +26,14 @@ import com.codexperiments.robolabor.task.TaskResult;
  * TODO Handle cancellation.
  * TODO Handle progress.
  * TODO Handle non-inner classes.
+ * TODO Handle listen().
  */
 public class TaskManagerAndroid implements TaskManager
 {
     private Configuration mConfig;
     // TODO Use concurrent collections.
     private List<TaskContainerAndroid<?>> mContainers;
-    private Map<Object, WeakReference<?>> mEmittersByType;
+    private Map<Object, WeakReference<?>> mEmittersById;
 
     private Handler mUIQueue;
     private Thread mUIThread;
@@ -43,7 +43,7 @@ public class TaskManagerAndroid implements TaskManager
         super();
         mConfig = pConfig;
         mContainers = new LinkedList<TaskContainerAndroid<?>>();
-        mEmittersByType = new HashMap<Object, WeakReference<?>>();
+        mEmittersById = new HashMap<Object, WeakReference<?>>();
         
         mUIQueue = new Handler(Looper.getMainLooper());
         mUIThread = mUIQueue.getLooper().getThread();
@@ -62,7 +62,7 @@ public class TaskManagerAndroid implements TaskManager
         // Note that an emitter Id can be null if no emitter dereferencement should be applied.
         Object lEmitterId = mConfig.resolveEmitterId(pEmitter);
         if (lEmitterId != null) {
-            mEmittersByType.put(lEmitterId, new WeakReference<Object>(pEmitter));
+            mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
             for (TaskContainerAndroid<?> lTaskContainer : mContainers) {
                 finish(lTaskContainer, false);
             }
@@ -79,9 +79,9 @@ public class TaskManagerAndroid implements TaskManager
         // Note that an emitter Id can be null if a task is not an inner class and thus has no outer class.
         Object lEmitterId = mConfig.resolveEmitterId(pEmitter);
         if (lEmitterId != null) {
-            WeakReference<?> lWeakRef = mEmittersByType.get(lEmitterId);
+            WeakReference<?> lWeakRef = mEmittersById.get(lEmitterId);
             if ((lWeakRef != null) && (lWeakRef.get() == pEmitter)) {
-                mEmittersByType.remove(lEmitterId);
+                mEmittersById.remove(lEmitterId);
             }
         }
     }
@@ -114,7 +114,7 @@ public class TaskManagerAndroid implements TaskManager
             lEmitterField.set(pTask, null);
             // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
             // collector do its job.
-            mEmittersByType.put(lEmitterId, new WeakReference<Object>(lEmitter));
+            mEmittersById.put(lEmitterId, new WeakReference<Object>(lEmitter));
             return lEmitterId;
         } catch (IllegalArgumentException eIllegalArgumentException) {
             throw InternalException.illegalCase();
@@ -149,16 +149,16 @@ public class TaskManagerAndroid implements TaskManager
         return true;
     }
 
-    @Override
-    public void notifyProgress(final TaskProgress pProgress) {
-        // Progress is always executed on the UI Thread.
-        mUIQueue.post(new Runnable() {
-            public void run() {
-                // TODO Restore reference during onProgress.
-                pProgress.onProgress();
-            }
-        });
-    }
+//    @Override
+//    public void notifyProgress(final TaskProgress pProgress) {
+//        // Progress is always executed on the UI Thread.
+//        mUIQueue.post(new Runnable() {
+//            public void run() {
+//                // TODO Restore reference during onProgress.
+//                pProgress.onProgress(TaskManagerAndroid.this);
+//            }
+//        });
+//    }
 
     /**
      * Called when task computation has ended. It restores emitters reference if applicable and triggers the right task callbacks.
@@ -192,12 +192,12 @@ public class TaskManagerAndroid implements TaskManager
             if (pContainer.mProcessed && !pContainer.mFinished && referenceEmitter(pContainer)) {
                 try {
                     if (pContainer.mThrowable == null) {
-                        pContainer.mTask.onFinish(pContainer.mResult);
+                        pContainer.mTask.onFinish(this, pContainer.mResult);
                     } else {
-                        pContainer.mTask.onError(pContainer.mThrowable);
+                        pContainer.mTask.onError(this, pContainer.mThrowable);
                     }
                 } catch (Exception eException) {
-                    pContainer.mTask.onError(eException);
+                    pContainer.mTask.onError(this, eException);
                 } finally {
                     pContainer.mFinished = true;
                 }
@@ -215,7 +215,7 @@ public class TaskManagerAndroid implements TaskManager
         try {
             // TODO Handle the case of non-inner classes.
             if (pContainer.mEmitterId != null) {
-                WeakReference<?> lEmitterRef = mEmittersByType.get(pContainer.mEmitterId);
+                WeakReference<?> lEmitterRef = mEmittersById.get(pContainer.mEmitterId);
                 if (lEmitterRef != null || !pContainer.mConfig.keepResultOnHold()) {
                     Field lEmitterField = resolveEmitterField(pContainer.mTask);
                     if (lEmitterField != null) {
@@ -291,7 +291,7 @@ public class TaskManagerAndroid implements TaskManager
         // On Executor-thread
         public void run() {
             try {
-                mResult = mTask.onProcess();
+                mResult = mTask.onProcess(TaskManagerAndroid.this);
             } catch (final Exception eException) {
                 mThrowable = eException;
             } finally {
