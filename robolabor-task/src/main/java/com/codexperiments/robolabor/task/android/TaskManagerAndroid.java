@@ -259,11 +259,10 @@ public class TaskManagerAndroid implements TaskManager
         
         private void saveEmitter() {
             try {
-                // Dereference the outer emitter.
+                // Retrieve emitter reference.
                 Object lEmitter = mEmitterField.get(mTask);
                 if (lEmitter == null) throw InternalException.illegalCase();
-                // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
-                // collector do its job.
+                // Save emitter class reference . A weak ref is used to avoid memory leaks and let the garbage collector work.
                 mEmittersById.put(mEmitterId, new WeakReference<Object>(lEmitter));
                 // Remove existing outer emitter reference contained in the task.
                 dereferenceEmitter();
