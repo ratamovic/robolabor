@@ -291,11 +291,14 @@ public class TaskManagerAndroid implements TaskManager
          * @param pTask Task to dereference.
          * @return Id of the emitter.
          */
-        protected Object dereferenceEmitter() {
+        protected void dereferenceEmitter() {
             try {
-                // Dereference the outer emitter.
-                mEmitterField.set(mTask, null);
-                return mEmitterId;
+                // Dereference the parent emitter.
+                if (mParentContainer != null) mParentContainer.dereferenceEmitter();
+                // Dereference emitter.
+                if (mIsInner) {
+                    mEmitterField.set(mTask, null);
+                }
             } catch (IllegalArgumentException eIllegalArgumentException) {
                 throw InternalException.illegalCase();
             } catch (IllegalAccessException eIllegalAccessException) {
@@ -312,21 +315,71 @@ public class TaskManagerAndroid implements TaskManager
         protected boolean referenceEmitter() {
             try {
                 // TODO Handle the case of non-inner classes.
-                if (mIsInner/* && (mEmitterField != null) && (mEmitterId != null)*/) {
+                
+                if (mIsInner) {
                     WeakReference<?> lEmitterRef = TaskManagerAndroid.this.mEmittersById.get(mEmitterId);
-                    if (lEmitterRef != null || !mTaskConfig.keepResultOnHold()) {
-                        if (mEmitterField != null) {
-                            // TODO Check lEmitterRef.get() returns not null value.
-                            mEmitterField.set(mTask, lEmitterRef.get());
-                            return true;
-                        }
-                    }
+                    // Check if we need and have a reference to the emitter.
+                    if (mTaskConfig.keepResultOnHold() && lEmitterRef == null) return false;
+                    // Check if parent containers can and have been restored.
+                    if ((mParentContainer != null) && !mParentContainer.referenceEmitter()) return false;
+                    
+                    // TODO Check lEmitterRef.get() returns not null value.
+                    mEmitterField.set(mTask, lEmitterRef.get());
+                    return true;
+                } else {
+                    return (mParentContainer != null) ? mParentContainer.referenceEmitter() : true;
                 }
-                return false;
+//                return false;
             } catch (IllegalAccessException eIllegalAccessException) {
                 throw InternalException.illegalCase();
             }
         }
+//        /**
+//         * Dereference the emitter (which is an outer class) from the task (which is an inner class) and return its Id. Emitter
+//         * references are stored internally so that they can be restored later when the task has finished its computation.
+//         * Note that an emitter Id can be null if a task is not an inner class or if no dereferencement should be applied.
+//         * @param pTask Task to dereference.
+//         * @return Id of the emitter.
+//         */
+//        protected void dereferenceEmitter() {
+//            try {
+//                // Dereference the outer emitter.
+//                if (mIsInner) {
+//                    mEmitterField.set(mTask, null);
+//                }
+//            } catch (IllegalArgumentException eIllegalArgumentException) {
+//                throw InternalException.illegalCase();
+//            } catch (IllegalAccessException eIllegalAccessException) {
+//                throw InternalException.illegalCase();
+//            }
+//        }
+//
+//        /**
+//         * Restore the emitter back into the task.
+//         * @param pContainer Container that contains the task to restore.
+//         * @return True if restoration could be performed properly. This may be false if a previously managed object become unmanaged
+//         *         meanwhile.
+//         */
+//        protected boolean referenceEmitter() {
+//            try {
+//                // TODO Handle the case of non-inner classes.
+//                if (mIsInner) {
+//                    WeakReference<?> lEmitterRef = TaskManagerAndroid.this.mEmittersById.get(mEmitterId);
+//                    if (lEmitterRef != null || !mTaskConfig.keepResultOnHold()) {
+//                        if (mEmitterField != null) {
+//                            // TODO Check lEmitterRef.get() returns not null value.
+//                            mEmitterField.set(mTask, lEmitterRef.get());
+//                            return true;
+//                        }
+//                    }
+//                } else {
+//                    return true;
+//                }
+////                return false;
+//            } catch (IllegalAccessException eIllegalAccessException) {
+//                throw InternalException.illegalCase();
+//            }
+//        }
 
         // On Executor-thread
         public void run() {
@@ -407,6 +460,9 @@ public class TaskManagerAndroid implements TaskManager
 
 
 
+    /**
+     * Not thread-safe. Don't mutate its state.
+     */
     public interface ManagerConfiguration {
         Object resolveEmitterId(Object pEmitter);
 
