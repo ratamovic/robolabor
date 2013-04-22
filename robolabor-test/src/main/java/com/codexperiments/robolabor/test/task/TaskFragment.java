@@ -91,6 +91,7 @@ public class TaskFragment extends Fragment {
         
         mTaskManager.execute(new Task<Integer>() {
             public Integer onProcess(TaskManager pTaskManager) throws Exception {
+                pTaskManager.notifyProgress();
                 Thread.sleep(TASK_DURATION);
                 return pTaskResult;
             }
@@ -107,7 +108,7 @@ public class TaskFragment extends Fragment {
             public void onError(TaskManager pTaskManager, Throwable pThrowable) {
                 mTaskException = pThrowable;
             }
-        }); // .dontKeepResult().inMainQueue();
+        });
         return lTaskFinished;
     }
 

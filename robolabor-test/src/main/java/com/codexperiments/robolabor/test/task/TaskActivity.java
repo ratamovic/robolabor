@@ -90,7 +90,7 @@ public class TaskActivity extends Activity {
             public void onError(TaskManager pTaskManager, Throwable pThrowable) {
                 mTaskException = pThrowable;
             }
-        }); // .dontKeepResult().inMainQueue()
+        });
         return lTaskFinished;
     }
 

@@ -9,4 +9,6 @@ public interface TaskManager
     <TResult> void execute(Task<TResult> pTask);
 
     <TResult> boolean listen(TaskResult<TResult> pTaskListener);
+
+    void notifyProgress(TaskProgress<?> pProgress);
 }
