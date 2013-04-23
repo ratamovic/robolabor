@@ -15,8 +15,8 @@ import android.view.ViewGroup;
 import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.test.R;
-import com.codexperiments.robolabor.test.common.TestApplicationContext;
 import com.codexperiments.robolabor.test.common.TestApplication;
+import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
 public class TaskFragment extends Fragment {
     private static final int TASK_DURATION = 5000;
