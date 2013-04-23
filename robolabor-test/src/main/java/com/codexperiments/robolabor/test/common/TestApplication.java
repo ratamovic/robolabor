@@ -5,10 +5,10 @@ import android.app.Application;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 
-public class TestApplication extends Application implements ApplicationContext.Provider {
+public class TestApplication extends Application implements TestApplicationContext.Provider {
 	public static volatile TestApplication Instance;
 	
-	private ApplicationContext mApplicationContext;
+	private TestApplicationContext mApplicationContext;
     private Activity mCurrentActivity;
     private Fragment mCurrentFragment;
 
@@ -20,15 +20,15 @@ public class TestApplication extends Application implements ApplicationContext.P
 	public void onCreate() {
 		super.onCreate();
 		Instance = this;
-		mApplicationContext = new ApplicationContext(this);
+		mApplicationContext = new TestApplicationContext(this);
 	}
     
     @Override
-    public ApplicationContext provideContext() {
+    public TestApplicationContext provideContext() {
         return mApplicationContext;
     }
 
-    public void setApplicationContext(ApplicationContext pApplicationContext) {
+    public void setApplicationContext(TestApplicationContext pApplicationContext) {
         mApplicationContext = pApplicationContext;
     }
 

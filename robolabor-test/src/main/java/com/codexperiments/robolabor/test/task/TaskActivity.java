@@ -12,7 +12,7 @@ import android.os.Bundle;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.test.R;
-import com.codexperiments.robolabor.test.common.ApplicationContext;
+import com.codexperiments.robolabor.test.common.TestApplicationContext;
 import com.codexperiments.robolabor.test.common.TestApplication;
 
 public class TaskActivity extends Activity {
@@ -34,7 +34,7 @@ public class TaskActivity extends Activity {
         setContentView(R.layout.main);
         
         TestApplication.Instance.setCurrentActivity(this);
-        ApplicationContext lApplicationContext = ApplicationContext.from(this);
+        TestApplicationContext lApplicationContext = TestApplicationContext.from(this);
         mTaskManager = lApplicationContext.getManager(TaskManager.class);
         mTaskManager.manage(this);
 
@@ -70,7 +70,7 @@ public class TaskActivity extends Activity {
         
         mTaskManager.execute(new TaskProgress<Integer>() {
             public Integer onProcess(TaskManager pTaskManager) throws Exception {
-                pTaskManager.notifyProgress();
+                pTaskManager.notifyProgress(this);
                 Thread.sleep(TASK_DURATION);
                 return pTaskResult;
             }

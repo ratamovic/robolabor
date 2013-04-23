@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
+import com.codexperiments.robolabor.task.android.configuration.DefaultConfiguration;
 import com.codexperiments.robolabor.test.common.TestApplication;
 import com.codexperiments.robolabor.test.common.TestCase;
 
@@ -26,7 +27,7 @@ public class TaskManagerActivityTest extends TestCase<TaskActivity> {
     @Override
     protected void setUpOnUIThread() throws Exception {
         super.setUpOnUIThread();
-        TaskManagerAndroid lTaskManager = new TaskManagerAndroid(new TaskManagerAndroid.DefaultConfiguration());
+        TaskManagerAndroid lTaskManager = new TaskManagerAndroid(new DefaultConfiguration());
         mApplicationContext.registerManager(lTaskManager);
     }
 

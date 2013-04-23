@@ -7,32 +7,29 @@ import android.app.Activity;
 import android.app.Application;
 import android.support.v4.app.Fragment;
 
-import com.codexperiments.robolabor.exception.InternalException;
-import com.codexperiments.robolabor.exception.UnknownManagerException;
-
-public class ApplicationContext {
+public class TestApplicationContext {
     private List<Object> mManagers;
 	private int mStartCounter;
 	//private Application mApplication;
 
-    public static ApplicationContext from(Application pApplication) {
+    public static TestApplicationContext from(Application pApplication) {
     	if ((pApplication != null) && (pApplication instanceof Provider)) {
         	return ((Provider) pApplication).provideContext();
     	}
-    	throw InternalException.invalidConfiguration("Could not retrieve application context from Fragment");
+    	throw TestException.invalidConfiguration("Could not retrieve application context from Fragment");
     }
 
-    public static ApplicationContext from(Activity pActivity) {
+    public static TestApplicationContext from(Activity pActivity) {
     	if (pActivity != null) {
         	Application application = pActivity.getApplication();
         	if ((application != null) && (application instanceof Provider)) {
             	return ((Provider) application).provideContext();
         	}
     	}
-    	throw InternalException.invalidConfiguration("Could not retrieve application context from Activity");
+    	throw TestException.invalidConfiguration("Could not retrieve application context from Activity");
     }
 
-    public static ApplicationContext from(Fragment pFragment) {
+    public static TestApplicationContext from(Fragment pFragment) {
         if (pFragment != null) {
             Activity lActivity = pFragment.getActivity();
             if (lActivity != null) {
@@ -42,20 +39,20 @@ public class ApplicationContext {
                 }
             }
         }
-        throw InternalException.invalidConfiguration("Could not retrieve application context from Activity");
+        throw TestException.invalidConfiguration("Could not retrieve application context from Activity");
     }
 
-    public static ApplicationContext from(android.app.Service pService) {
+    public static TestApplicationContext from(android.app.Service pService) {
     	if (pService != null) {
         	Application application = pService.getApplication();
         	if ((application != null) && (application instanceof Provider)) {
             	return ((Provider) application).provideContext();
         	}
     	}
-    	throw InternalException.invalidConfiguration("Could not retrieve application context from Application");
+    	throw TestException.invalidConfiguration("Could not retrieve application context from Application");
     }
 
-    public ApplicationContext(Application pApplication) {
+    public TestApplicationContext(Application pApplication) {
         super();
 //        mApplication = pApplication;
         mManagers = new ArrayList<Object>(20);
@@ -103,10 +100,10 @@ public class ApplicationContext {
                 return (TManager) iManager;
             }
         }
-        throw new UnknownManagerException(String.format("%1$s n'est pas un service entregistr�.", pManagerClass.getName()));
+        throw TestException.unknownManager(pManagerClass);
     }
 
     public interface Provider {
-        ApplicationContext provideContext();
+        TestApplicationContext provideContext();
     }
 }

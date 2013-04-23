@@ -15,7 +15,7 @@ import android.view.ViewGroup;
 import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.test.R;
-import com.codexperiments.robolabor.test.common.ApplicationContext;
+import com.codexperiments.robolabor.test.common.TestApplicationContext;
 import com.codexperiments.robolabor.test.common.TestApplication;
 
 public class TaskFragment extends Fragment {
@@ -48,7 +48,7 @@ public class TaskFragment extends Fragment {
         super.onCreate(pBundle);
         
         TestApplication.Instance.setCurrentFragment(this);
-        ApplicationContext lApplicationContext = ApplicationContext.from(this);
+        TestApplicationContext lApplicationContext = TestApplicationContext.from(this);
         mTaskManager = lApplicationContext.getManager(TaskManager.class);
         mTaskManager.manage(this);
 
@@ -91,7 +91,7 @@ public class TaskFragment extends Fragment {
         
         mTaskManager.execute(new Task<Integer>() {
             public Integer onProcess(TaskManager pTaskManager) throws Exception {
-                pTaskManager.notifyProgress();
+                pTaskManager.notifyProgress(this);
                 Thread.sleep(TASK_DURATION);
                 return pTaskResult;
             }
@@ -131,7 +131,7 @@ public class TaskFragment extends Fragment {
             setContentView(R.layout.main);
             
             TestApplication.Instance.setCurrentActivity(this);
-            ApplicationContext lApplicationContext = ApplicationContext.from(this);
+            TestApplicationContext lApplicationContext = TestApplicationContext.from(this);
             mTaskManager = lApplicationContext.getManager(TaskManager.class);
             mTaskManager.manage(this);
             

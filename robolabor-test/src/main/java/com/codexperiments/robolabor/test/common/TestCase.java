@@ -13,7 +13,7 @@ import android.test.ActivityInstrumentationTestCase2;
 
 public class TestCase<TActivity extends Activity> extends ActivityInstrumentationTestCase2<TActivity> {
     protected TestApplication mApplication;
-    protected ApplicationContext mApplicationContext;
+    protected TestApplicationContext mApplicationContext;
 
 	public TestCase(Class<TActivity> activityClass) {
         super(activityClass);
@@ -34,7 +34,7 @@ public class TestCase<TActivity extends Activity> extends ActivityInstrumentatio
 		}
 		
 		mApplication = TestApplication.Instance;
-        mApplicationContext = new ApplicationContext(mApplication);
+        mApplicationContext = new TestApplicationContext(mApplication);
         mApplication.setApplicationContext(mApplicationContext);
 
         // Execute initialization code on UI Thread.
