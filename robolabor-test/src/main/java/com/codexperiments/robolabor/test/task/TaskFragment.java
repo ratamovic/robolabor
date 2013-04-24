@@ -12,8 +12,8 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManager;
+import com.codexperiments.robolabor.task.util.ProgressiveTask;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.TestApplication;
 import com.codexperiments.robolabor.test.common.TestApplicationContext;
@@ -89,11 +89,14 @@ public class TaskFragment extends Fragment {
         final CountDownLatch lTaskFinished = new CountDownLatch(1);
         final boolean lCheckFragmentNull = getArguments().getBoolean("CheckFragmentNull", false);
         
-        mTaskManager.execute(new Task<Integer>() {
+        mTaskManager.execute(new ProgressiveTask<Integer>() {
             public Integer onProcess(TaskManager pTaskManager) throws Exception {
                 pTaskManager.notifyProgress(this);
                 Thread.sleep(TASK_DURATION);
                 return pTaskResult;
+            }
+
+            public void onProgress(TaskManager pTaskManager) {
             }
 
             public void onFinish(TaskManager pTaskManager, Integer pTaskResult) {

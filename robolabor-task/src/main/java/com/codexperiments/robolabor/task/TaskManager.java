@@ -10,5 +10,5 @@ public interface TaskManager
 
     <TResult> boolean listen(TaskResult<TResult> pTaskListener);
 
-    void notifyProgress(TaskProgress<?> pProgress);
+    void notifyProgress(TaskProgress pProgress);
 }

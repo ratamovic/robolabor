@@ -19,6 +19,7 @@ import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.task.TaskResult;
 
 /**
+ * TODO Handle Unique tasks.
  * TODO Handle timeout.
  * TODO Handle cancellation.
  * TODO Implement listen().
@@ -128,11 +129,11 @@ public class TaskManagerAndroid implements TaskManager
     }
 
     @Override
-    public void notifyProgress(final TaskProgress<?> pProgress) {
+    public void notifyProgress(final TaskProgress pProgress) {
         throw TaskManagerException.notCalledFromTask();
     }
 
-    protected void notifyProgress(final TaskProgress<?> pProgress, final TaskContainerAndroid<?> pContainer) {
+    protected void notifyProgress(final TaskProgress pProgress, final TaskContainerAndroid<?> pContainer) {
         // Progress is always executed on the UI-Thread but sent from a non-UI-Thread.
         mUIQueue.post(new Runnable() {
             public void run() {
@@ -395,7 +396,7 @@ public class TaskManagerAndroid implements TaskManager
         }
 
         @Override
-        public void notifyProgress(TaskProgress<?> pProgress) {
+        public void notifyProgress(TaskProgress pProgress) {
             TaskManagerAndroid.this.notifyProgress(pProgress, this);
         }
 

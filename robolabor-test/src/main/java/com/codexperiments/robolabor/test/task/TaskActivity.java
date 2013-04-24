@@ -10,10 +10,10 @@ import android.content.Intent;
 import android.os.Bundle;
 
 import com.codexperiments.robolabor.task.TaskManager;
-import com.codexperiments.robolabor.task.TaskProgress;
+import com.codexperiments.robolabor.task.util.ProgressiveTask;
 import com.codexperiments.robolabor.test.R;
-import com.codexperiments.robolabor.test.common.TestApplicationContext;
 import com.codexperiments.robolabor.test.common.TestApplication;
+import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
 public class TaskActivity extends Activity {
     private static final int TASK_DURATION = 5000;
@@ -68,7 +68,7 @@ public class TaskActivity extends Activity {
         final CountDownLatch lTaskFinished = new CountDownLatch(1);
         final boolean lCheckActivityNull = getIntent().getBooleanExtra("CheckActivityNull", false);
         
-        mTaskManager.execute(new TaskProgress<Integer>() {
+        mTaskManager.execute(new ProgressiveTask<Integer>() {
             public Integer onProcess(TaskManager pTaskManager) throws Exception {
                 pTaskManager.notifyProgress(this);
                 Thread.sleep(TASK_DURATION);
