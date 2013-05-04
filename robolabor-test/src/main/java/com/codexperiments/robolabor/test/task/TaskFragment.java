@@ -1,7 +1,7 @@
 package com.codexperiments.robolabor.test.task;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.CoreMatchers.nullValue;
+import static org.junit.Assert.assertThat;
 
 import java.util.concurrent.CountDownLatch;
 
@@ -20,13 +20,13 @@ import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
 public class TaskFragment extends Fragment {
     private static final int TASK_DURATION = 5000;
-    
+
     private View mView;
 
     private TaskManager mTaskManager;
     private Integer mTaskResult;
     private Throwable mTaskException;
-    
+
     public static TaskFragment newInstanceCheckNull() {
         TaskFragment fragment = new TaskFragment();
 
@@ -46,7 +46,7 @@ public class TaskFragment extends Fragment {
     @Override
     public void onCreate(Bundle pBundle) {
         super.onCreate(pBundle);
-        
+
         TestApplication.Instance.setCurrentFragment(this);
         TestApplicationContext lApplicationContext = TestApplicationContext.from(this);
         mTaskManager = lApplicationContext.getManager(TaskManager.class);
@@ -78,7 +78,7 @@ public class TaskFragment extends Fragment {
         super.onStop();
         mTaskManager.unmanage(this);
     }
-    
+
     @Override
     public void onSaveInstanceState(Bundle pBundle) {
         super.onSaveInstanceState(pBundle);
@@ -88,7 +88,7 @@ public class TaskFragment extends Fragment {
     public CountDownLatch runTask(final Integer pTaskResult) {
         final CountDownLatch lTaskFinished = new CountDownLatch(1);
         final boolean lCheckFragmentNull = getArguments().getBoolean("CheckFragmentNull", false);
-        
+
         mTaskManager.execute(new ProgressiveTask<Integer>() {
             public Integer onProcess(TaskManager pTaskManager) throws Exception {
                 pTaskManager.notifyProgress(this);
@@ -108,7 +108,7 @@ public class TaskFragment extends Fragment {
                 lTaskFinished.countDown();
             }
 
-            public void onError(TaskManager pTaskManager, Throwable pThrowable) {
+            public void onFail(TaskManager pTaskManager, Throwable pThrowable) {
                 mTaskException = pThrowable;
             }
         });
@@ -123,28 +123,25 @@ public class TaskFragment extends Fragment {
         return mTaskException;
     }
 
-
-
     public static class Activity extends FragmentActivity {
         private TaskManager mTaskManager;
-        
+
         @Override
         protected void onCreate(Bundle pBundle) {
             super.onCreate(pBundle);
             setContentView(R.layout.main);
-            
+
             TestApplication.Instance.setCurrentActivity(this);
             TestApplicationContext lApplicationContext = TestApplicationContext.from(this);
             mTaskManager = lApplicationContext.getManager(TaskManager.class);
             mTaskManager.manage(this);
-            
 
             if (pBundle == null) {
-                getSupportFragmentManager().beginTransaction()
-                .add(0, TaskFragment.newInstance(), "uniquetag")
-                .replace(R.id.activity_content, TaskFragment.newInstance())
-                .add(0, TaskFragment.newInstance())
-                .commit();
+                getSupportFragmentManager().beginTransaction() //
+                                .add(0, TaskFragment.newInstance(), "uniquetag") //
+                                .replace(R.id.activity_content, TaskFragment.newInstance()) //
+                                .add(0, TaskFragment.newInstance()) //
+                                .commit();
             }
         }
 
@@ -159,15 +156,15 @@ public class TaskFragment extends Fragment {
             super.onStop();
             mTaskManager.unmanage(this);
         }
-        
+
         public TaskFragment getFragmentWithId() {
             return (TaskFragment) getSupportFragmentManager().findFragmentById(R.id.activity_content);
         }
-        
+
         public TaskFragment getFragmentWithTag() {
             return (TaskFragment) getSupportFragmentManager().findFragmentByTag("uniquetag");
         }
-        
+
         public TaskFragment getFragmentNoIdNorTag() {
             return (TaskFragment) getSupportFragmentManager().findFragmentById(0);
         }

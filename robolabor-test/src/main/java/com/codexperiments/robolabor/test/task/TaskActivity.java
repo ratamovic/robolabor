@@ -1,7 +1,7 @@
 package com.codexperiments.robolabor.test.task;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.CoreMatchers.nullValue;
+import static org.junit.Assert.assertThat;
 
 import java.util.concurrent.CountDownLatch;
 
@@ -21,8 +21,8 @@ public class TaskActivity extends Activity {
     private TaskManager mTaskManager;
     private Integer mTaskResult;
     private Throwable mTaskException;
-    
-    public static Intent activityToDestroy() {
+
+    public static Intent destroyableActivity() {
         Intent lIntent = new Intent();
         lIntent.putExtra("CheckActivityNull", true);
         return lIntent;
@@ -32,7 +32,7 @@ public class TaskActivity extends Activity {
     protected void onCreate(Bundle pBundle) {
         super.onCreate(pBundle);
         setContentView(R.layout.main);
-        
+
         TestApplication.Instance.setCurrentActivity(this);
         TestApplicationContext lApplicationContext = TestApplicationContext.from(this);
         mTaskManager = lApplicationContext.getManager(TaskManager.class);
@@ -40,7 +40,7 @@ public class TaskActivity extends Activity {
 
         mTaskResult = null;
         mTaskException = null;
-        
+
         if (pBundle != null) {
             mTaskResult = (Integer) pBundle.getSerializable("TaskResult");
         }
@@ -57,7 +57,7 @@ public class TaskActivity extends Activity {
         super.onStop();
         mTaskManager.unmanage(this);
     }
-    
+
     @Override
     protected void onSaveInstanceState(Bundle pBundle) {
         super.onSaveInstanceState(pBundle);
@@ -67,7 +67,7 @@ public class TaskActivity extends Activity {
     public CountDownLatch runTask(final Integer pTaskResult) {
         final CountDownLatch lTaskFinished = new CountDownLatch(1);
         final boolean lCheckActivityNull = getIntent().getBooleanExtra("CheckActivityNull", false);
-        
+
         mTaskManager.execute(new ProgressiveTask<Integer>() {
             public Integer onProcess(TaskManager pTaskManager) throws Exception {
                 pTaskManager.notifyProgress(this);
@@ -87,7 +87,7 @@ public class TaskActivity extends Activity {
                 lTaskFinished.countDown();
             }
 
-            public void onError(TaskManager pTaskManager, Throwable pThrowable) {
+            public void onFail(TaskManager pTaskManager, Throwable pThrowable) {
                 mTaskException = pThrowable;
             }
         });

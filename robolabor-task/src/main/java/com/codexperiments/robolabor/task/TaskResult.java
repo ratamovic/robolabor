@@ -10,9 +10,9 @@ public interface TaskResult<TResult>
     void onFinish(TaskManager pTaskManager, TResult pResult);
 
     /**
-     * Si l'exécution de onProgress() échoue, onError() est alors appelé sur le thread UI. Tout
+     * Si l'exécution de onProgress() échoue, onFail() est alors appelé sur le thread UI. Tout
      * message d'erreur ou modification/effacement des données affichées dans l'UI doivent être
      * réalisé ici.
      */
-    void onError(TaskManager pTaskManager, Throwable pThrowable);
+    void onFail(TaskManager pTaskManager, Throwable pThrowable);
 }
