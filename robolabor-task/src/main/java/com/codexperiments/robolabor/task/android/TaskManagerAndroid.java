@@ -112,7 +112,7 @@ public class TaskManagerAndroid implements TaskManager
      */
     protected WeakReference<?> resolve(Object pEmitterId)
     {
-        return TaskManagerAndroid.this.mEmittersById.get(pEmitterId);
+        return mEmittersById.get(pEmitterId);
     }
 
     @Override
@@ -337,7 +337,7 @@ public class TaskManagerAndroid implements TaskManager
                     // It is important to validate reference can be restored before trying to restore it in the parent container.
                     // Indeed, if the reference cannot be restored at one level in the hierarchy, then no emitter is restored at
                     // any level and thus, no "rollback" is necessary.
-                    WeakReference<?> lEmitterRef = resolve(mEmitterId);
+                    WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolve(mEmitterId);
                     if (lEmitterRef == null) return false;
                     Object lEmitter = lEmitterRef.get();
                     if (lEmitter == null) return false;

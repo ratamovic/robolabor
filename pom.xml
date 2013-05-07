@@ -18,14 +18,7 @@
 		<android.platform>16</android.platform>
 		<maven.compiler.plugin>2.5.1</maven.compiler.plugin>
 		<maven.android.plugin>3.5.0</maven.android.plugin>
-		<maven.checkstyle.plugin>2.9.1</maven.checkstyle.plugin>
-		<maven.cobertura.plugin>2.5.2</maven.cobertura.plugin>
-		<maven.emma.plugin>2.1.5320</maven.emma.plugin>
 		<maven.eclipse-lifecycle.plugin>1.0.0</maven.eclipse-lifecycle.plugin>
-		<maven.findbugs.plugin>2.5.2</maven.findbugs.plugin>
-		<maven.jacoco.plugin>0.6.2.201302030002</maven.jacoco.plugin>
-		<maven.lint.plugin>0.0.6</maven.lint.plugin>
-		<maven.pmd.plugin>2.7.1</maven.pmd.plugin>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<sonar.skippedModules>robolabor-test</sonar.skippedModules>
 	</properties>
@@ -61,17 +54,6 @@
 				<version>4.8.2</version>
 				<scope>compile</scope>
 			</dependency>
-			<dependency>
-				<groupId>org.jacoco</groupId>
-				<artifactId>org.jacoco.agent</artifactId>
-				<version>${maven.jacoco.plugin}</version>
-				<classifier>runtime</classifier>
-			</dependency>
-			<dependency>
-				<groupId>emma</groupId>
-				<artifactId>emma</artifactId>
-				<version>${maven.emma.plugin}</version>
-			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
@@ -98,76 +80,6 @@
 					<extensions>true</extensions>
 				</plugin>
 				<plugin>
-					<groupId>org.jacoco</groupId>
-					<artifactId>jacoco-maven-plugin</artifactId>
-					<version>${maven.jacoco.plugin}</version>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-checkstyle-plugin</artifactId>
-					<version>${maven.checkstyle.plugin}</version>
-					<configuration>
-						<configLocation>checkstyle.xml</configLocation>
-						<enableRulesSummary>false</enableRulesSummary>
-					</configuration>
-					<executions>
-						<execution>
-							<id>checkstyle-check</id>
-							<phase>process-sources</phase>
-							<goals>
-								<goal>check</goal>
-							</goals>
-						</execution>
-					</executions>
-				</plugin>
-				<plugin>
-					<groupId>org.codehaus.mojo</groupId>
-					<artifactId>findbugs-maven-plugin</artifactId>
-					<version>${maven.findbugs.plugin}</version>
-					<configuration>
-						<excludeFilterFile>findbugs-filter.xml</excludeFilterFile>
-					</configuration>
-					<executions>
-						<execution>
-							<id>findbugs-check</id>
-							<phase>verify</phase>
-							<goals>
-								<goal>check</goal>
-							</goals>
-						</execution>
-					</executions>
-				</plugin>
-				<plugin>
-					<groupId>org.apache.maven.plugins</groupId>
-					<artifactId>maven-pmd-plugin</artifactId>
-					<version>${maven.pmd.plugin}</version>
-					<configuration>
-						<targetJdk>1.5</targetJdk>
-					</configuration>
-					<executions>
-						<execution>
-							<id>pmd-check</id>
-							<goals>
-								<goal>check</goal>
-								<goal>cpd-check</goal>
-							</goals>
-						</execution>
-					</executions>
-				</plugin>
-				<plugin>
-					<groupId>com.lewisd</groupId>
-					<artifactId>lint-maven-plugin</artifactId>
-					<version>${maven.lint.plugin}</version>
-					<executions>
-						<execution>
-							<phase>validate</phase>
-							<goals>
-								<goal>check</goal>
-							</goals>
-						</execution>
-					</executions>
-				</plugin>
-				<plugin>
 					<groupId>org.eclipse.m2e</groupId>
 					<artifactId>lifecycle-mapping</artifactId>
 					<version>${maven.eclipse-lifecycle.plugin}</version>
@@ -181,32 +93,6 @@
 										<versionRange>[1.0.0,)</versionRange>
 										<goals>
 											<goal>enforce</goal>
-										</goals>
-									</pluginExecutionFilter>
-									<action>
-										<ignore />
-									</action>
-								</pluginExecution>
-								<pluginExecution>
-									<pluginExecutionFilter>
-										<groupId>com.lewisd</groupId>
-										<artifactId>lint-maven-plugin</artifactId>
-										<versionRange>[${maven.lint.plugin},)</versionRange>
-										<goals>
-											<goal>check</goal>
-										</goals>
-									</pluginExecutionFilter>
-									<action>
-										<ignore />
-									</action>
-								</pluginExecution>
-								<pluginExecution>
-									<pluginExecutionFilter>
-										<groupId>org.apache.maven.plugins</groupId>
-										<artifactId>maven-checkstyle-plugin</artifactId>
-										<versionRange>[1.0.0,)</versionRange>
-										<goals>
-											<goal>check</goal>
 										</goals>
 									</pluginExecutionFilter>
 									<action>
