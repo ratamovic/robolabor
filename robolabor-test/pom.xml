@@ -49,7 +49,7 @@
 
     <profiles>
         <profile>
-            <id>emma</id>
+            <id>quality</id>
 
             <dependencies>
                 <dependency>
@@ -107,9 +107,6 @@
                             <execution>
                                 <phase>process-classes</phase>
                                 <configuration>
-                                    <filters>
-                                        <filter>-*.test.*</filter>
-                                    </filters>
                                     <metadataFile>${project.build.directory}/emma/coverage.em</metadataFile>
                                     <verbose>true</verbose>
                                 </configuration>

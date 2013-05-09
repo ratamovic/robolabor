@@ -114,16 +114,15 @@
 
     <profiles>
         <profile>
-            <id>emma</id>
-            <modules>
-                <module>robolabor-test</module>
-            </modules>
+            <id>quality</id>
 
             <properties>
                 <sonar.core.codeCoveragePlugin>emma</sonar.core.codeCoveragePlugin>
                 <sonar.dynamicAnalysis>reuseReports</sonar.dynamicAnalysis>
                 <sonar.emma.reportPath>target/emma/</sonar.emma.reportPath>
+                <sonar.skippedModules>robolabor-task</sonar.skippedModules> 
                 <sonar.surefire.reportsPath>target/surefire-reports</sonar.surefire.reportsPath>
+                <sonar.exclusions>**/R.java,**/BuildConfig.java,**/test/**/*.java</sonar.exclusions>
             </properties>
         </profile>
     </profiles>
