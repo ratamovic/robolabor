@@ -81,6 +81,15 @@
                     <plugin>
                         <groupId>com.jayway.maven.plugins.android.generation2</groupId>
                         <artifactId>android-maven-plugin</artifactId>
+                        <configuration>
+                            <dex>
+                                <noLocals>true</noLocals>
+                            </dex>
+                            <test>
+                                <coverage>true</coverage>
+                                <createReport>true</createReport>
+                            </test>
+                        </configuration>
                         <executions>
                             <execution>
                                 <id>pull-coverage</id>
