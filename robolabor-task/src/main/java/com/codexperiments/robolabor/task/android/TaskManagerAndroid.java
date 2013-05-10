@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutorService;
 
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskIdentity;
@@ -20,14 +21,17 @@ import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.task.TaskResult;
 
 /**
- * <ul>
- * <li>TODO handler = getWindow().getDecorView().getHandler();</li>
- * <li>TODO Handle Unique tasks.</li>
- * <li>TODO Handle timeout.</li>
- * <li>TODO Handle cancellation.</li>
- * <li>TODO Implement listen().</li>
- * <li>TODO Rework synchronization.</li>
- * </ul>
+ * TODO handler = getWindow().getDecorView().getHandler();
+ * 
+ * TODO Handle Unique tasks.
+ * 
+ * TODO Handle timeout.
+ * 
+ * TODO Handle cancellation.
+ * 
+ * TODO Implement listen().
+ * 
+ * TODO Rework synchronization.
  */
 public class TaskManagerAndroid implements TaskManager
 {
@@ -201,6 +205,11 @@ public class TaskManagerAndroid implements TaskManager
     /**
      * TODO Explain why we implement TaskManager.
      * 
+     * TODO We have a problem here: technically speaking, an object can contain several outer references (i.e. several this$x),
+     * with at most one reference per inheritance level. This case is rare but possible and not handled here. To handle it
+     * properly, we should look for an emitter field on Task super classes too and keep a list of emitter fields instead of a
+     * single one. The same goes for emitter ids of course.
+     * 
      * @param <TResult>
      */
     private class TaskContainerAndroid<TResult> implements Runnable, TaskManager
@@ -241,7 +250,8 @@ public class TaskManagerAndroid implements TaskManager
         }
 
         /**
-         * Locate the outer object reference Field (e.g. this$0) inside the task class.
+         * Locate the outer object reference Field (e.g. this$0) inside the task class. Check is performed recursively on super
+         * classes until reference is found.
          * 
          * @param pTask Object on which the field must be located.
          * @return Field pointing to the outer object or null if pTask is not an inner-class.
@@ -249,13 +259,18 @@ public class TaskManagerAndroid implements TaskManager
         private Field resolveEmitterField()
         {
             if (mIsInner) {
-                Field[] lFields = mTask.getClass().getDeclaredFields();
-                for (Field lField : lFields) {
-                    String lFieldName = lField.getName();
-                    if (lFieldName.startsWith("this$")) {
-                        lField.setAccessible(true);
-                        return lField;
+                Class<?> lTaskClass = mTask.getClass();
+                while (lTaskClass != null) {
+                    Field[] lFields = mTask.getClass().getDeclaredFields();
+                    for (Field lField : lFields) {
+                        String lFieldName = lField.getName();
+                        if (lFieldName.startsWith("this$")) {
+                            lField.setAccessible(true);
+                            return lField;
+                        }
                     }
+
+                    lTaskClass = lTaskClass.getSuperclass();
                 }
                 throw TaskManagerException.invalidTask(mTask, "Could not find outer class field.");
             } else {
@@ -392,9 +407,10 @@ public class TaskManagerAndroid implements TaskManager
                 }
             }
             // An exception occurred inside onFail. We can't do much now except committing a suicide or logging the exception
-            // and then ignoring it. I tend to prefer an explicit error even if it kills the application... That's a choice
-            // that should be re-thought. Anyway this explains why there is no catch here.
-            finally {
+            // and then ignoring it. I've chosen the second option but maybe decision should be left to the configuration.
+            catch (Exception eException) {
+                Log.e(TaskManagerAndroid.class.getSimpleName(), "An error occured inside a task handler", eException);
+            } finally {
                 mFinished = true;
             }
             return true;

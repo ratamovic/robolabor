@@ -25,6 +25,7 @@ public class TestApplicationContext
 
     public static TestApplicationContext from(Activity pActivity)
     {
+        TestApplication.Instance.setCurrentActivity(pActivity);
         if (pActivity != null) {
             Application application = pActivity.getApplication();
             if ((application != null) && (application instanceof Provider)) {
