@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
+import com.codexperiments.robolabor.task.android.TaskManagerException;
 import com.codexperiments.robolabor.task.android.configuration.DefaultConfiguration;
 import com.codexperiments.robolabor.test.common.TestApplication;
 import com.codexperiments.robolabor.test.common.TestCase;
@@ -17,6 +18,8 @@ import com.codexperiments.robolabor.test.common.TestCase;
 public class TaskManagerActivityTest extends TestCase<TaskActivity>
 {
     private static final int TIMEOUT = 10000;
+
+    private TaskManagerAndroid mTaskManager;
 
     public TaskManagerActivityTest()
     {
@@ -33,8 +36,8 @@ public class TaskManagerActivityTest extends TestCase<TaskActivity>
     protected void setUpOnUIThread() throws Exception
     {
         super.setUpOnUIThread();
-        TaskManagerAndroid lTaskManager = new TaskManagerAndroid(new DefaultConfiguration());
-        mApplicationContext.registerManager(lTaskManager);
+        mTaskManager = new TaskManagerAndroid(new DefaultConfiguration());
+        mApplicationContext.registerManager(mTaskManager);
     }
 
     @Override
@@ -81,5 +84,15 @@ public class TaskManagerActivityTest extends TestCase<TaskActivity>
 
         lInitialActivity = terminateActivity(lInitialActivity);
         assertThat(lTaskFinished.await(TIMEOUT, TimeUnit.MILLISECONDS), equalTo(true));
+    }
+
+    public void testExecute_taskNull() throws InterruptedException
+    {
+        try {
+            mTaskManager.execute(null);
+            fail();
+        } catch (TaskManagerException eTaskManagerException) {
+            // Success
+        }
     }
 }

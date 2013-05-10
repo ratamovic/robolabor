@@ -48,14 +48,6 @@ public class TaskManagerAndroid implements TaskManager
         mUIThread = mUIQueue.getLooper().getThread();
     }
 
-    public void start()
-    {
-    }
-
-    public void stop()
-    {
-    }
-
     @Override
     public void manage(Object pEmitter)
     {
