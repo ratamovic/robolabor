@@ -35,7 +35,7 @@ import com.codexperiments.robolabor.task.TaskResult;
 public class TaskManagerAndroid implements TaskManager
 {
     private ManagerConfiguration mManagerConfig;
-    private Set<TaskContainerAndroid<?>> mContainers;
+    private Set<TaskContainer<?>> mContainers;
     private Map<Object, WeakReference<?>> mEmittersById;
 
     private Handler mUIQueue;
@@ -45,7 +45,7 @@ public class TaskManagerAndroid implements TaskManager
     {
         super();
         mManagerConfig = pConfig;
-        mContainers = new HashSet<TaskContainerAndroid<?>>();
+        mContainers = new HashSet<TaskContainer<?>>();
         mEmittersById = new HashMap<Object, WeakReference<?>>();
 
         mUILooper = Looper.getMainLooper();
@@ -59,7 +59,7 @@ public class TaskManagerAndroid implements TaskManager
         manage(pEmitter, null);
     }
 
-    protected Object manage(Object pEmitter, TaskContainerAndroid<?> pParentContainer)
+    protected Object manage(Object pEmitter, TaskContainer<?> pParentContainer)
     {
         // Save the new task emitter in the reference list. Replace the existing one if any according to its id (the old one is
         // considered obsolete). Emitter Id is computed by the configuration strategy. See DefaultConfiguration for an example.
@@ -69,10 +69,10 @@ public class TaskManagerAndroid implements TaskManager
             // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
             // collector do its job.
             mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
-            // Remove any call
-            for (TaskContainerAndroid<?> lContainer : mContainers) {
-                if (lContainer.finish(false)) {
-                    mContainers.remove(lContainer);
+            // Try to terminate any task that could be terminated now that a new "potential emitter" is registered.
+            for (TaskContainer<?> lContainer : mContainers) {
+                if (lContainer.finish()) {
+                    notifyFinished(lContainer);
                 }
             }
         }
@@ -123,13 +123,13 @@ public class TaskManagerAndroid implements TaskManager
         execute(pTask, null);
     }
 
-    protected <TResult> void execute(Task<TResult> pTask, TaskContainerAndroid<?> pParentContainer)
+    protected <TResult> void execute(Task<TResult> pTask, TaskContainer<?> pParentContainer)
     {
         if (pTask == null) throw TaskManagerException.invalidTask();
 
         // Create a container to run the task.
         TaskConfiguration lTaskConfig = mManagerConfig.resolveConfiguration(pTask);
-        TaskContainerAndroid<TResult> lContainer = new TaskContainerAndroid<TResult>(pTask, lTaskConfig, pParentContainer);
+        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, lTaskConfig, pParentContainer, mUIQueue);
         // Remember and run the new task. If an identical task is already executing, do nothing to prevent duplicate tasks.
         if (!mContainers.contains(lContainer)) {
             // Prepare the task (i.e. cache needed values) before adding it because the first operation can fail (and we don't
@@ -147,7 +147,7 @@ public class TaskManagerAndroid implements TaskManager
         return true;
     }
 
-    protected <TResult> boolean listen(TaskResult<TResult> pTaskListener, TaskContainerAndroid<?> pContainer)
+    protected <TResult> boolean listen(TaskResult<TResult> pTaskListener, TaskContainer<?> pContainer)
     {
         return true;
     }
@@ -158,50 +158,14 @@ public class TaskManagerAndroid implements TaskManager
         throw TaskManagerException.notCalledFromTask();
     }
 
-    protected void notifyProgress(Runnable pProgressRunnable)
-    {
-        // Progress is always executed on the UI-Thread but sent from a non-UI-Thread.
-        mUIQueue.post(pProgressRunnable);
-    }
-
     /**
-     * Called when task computation has ended. It restores emitters reference if applicable and triggers the right task callbacks.
-     * Triggers are executed on the UI Thread.
+     * Called when task is processed and finished to clean remaining references.
      * 
-     * @param pContainer Container that contains the finished task.
-     * @param pConfirmProcessed True to indicate that the task has finished its computation or False if we don't know. This
-     *            parameter should be set to true only from the computation thread after onProcess(), when we know for task is
-     *            over.
+     * @param pContainer Finished task container.
      */
-    /**
-     * If we know for sure the task is finished, set the corresponding flag. That way, finish() can be called at any time:
-     * <ul>
-     * <li>When task isn't finished yet, in which case nothing happens. This can occur if a new instance of the emitter becomes
-     * managed while task is still executing: the task manager try to call finish on all tasks.</li>
-     * <li>When task has just finished, i.e. finish is called from the computation thread, and its emitter is available. In this
-     * case, the flag is set to true and task final callback is triggered.</li>
-     * <li>When task has just finished but its emitter is not available yet, i.e. it has been unmanaged. In this case, the flag is
-     * set to true but task final callback is NOT triggered. it will be triggered later when a new emitter (with the same Id)
-     * becomes managed.</li>
-     * <li>When an emitter with the same Id as the previously managed-then-unmanaged one becomes managed. In this case the flag is
-     * already true but the final task callback may have not been called yet (i.e. if mFinished is false). This can be done now.
-     * Note hat it is possible to have finish() called several times since there may be a delay between finish() call and
-     * execution as it is posted on the UI Thread.</li>
-     * </ul>
-     * 
-     * @param pContainer
-     * @param pConfirmProcessed
-     */
-    protected <TResult> void finish(final TaskContainerAndroid<TResult> pContainer)
+    protected <TResult> void notifyFinished(final TaskContainer<TResult> pContainer)
     {
-        mUIQueue.post(new Runnable() {
-            public void run()
-            {
-                if (pContainer.finish(true)) {
-                    mContainers.remove(pContainer);
-                }
-            }
-        });
+        mContainers.remove(pContainer);
     }
 
     /**
@@ -212,16 +176,17 @@ public class TaskManagerAndroid implements TaskManager
      * properly, we should look for an emitter field on Task super classes too and keep a list of emitter fields instead of a
      * single one. The same goes for emitter ids of course.
      * 
-     * @param <TResult>
+     * @param <TResult> Expected task result.
      */
-    private class TaskContainerAndroid<TResult> implements Runnable, TaskManager
+    private class TaskContainer<TResult> implements Runnable, TaskManager
     {
         // Container info.
         private Task<TResult> mTask;
         private Object mTaskId;
         private TaskConfiguration mTaskConfig;
         private boolean mIsInner;
-        private TaskContainerAndroid<?> mParentContainer;
+        private TaskContainer<?> mParentContainer;
+        private Handler mUIQueue;
 
         // Task result and state.
         private TResult mResult;
@@ -234,7 +199,10 @@ public class TaskManagerAndroid implements TaskManager
         private Object mEmitterId;
         private Runnable mProgressRunnable;
 
-        public TaskContainerAndroid(Task<TResult> pTask, TaskConfiguration pTaskConfig, TaskContainerAndroid<?> pParentContainer)
+        public TaskContainer(Task<TResult> pTask,
+                             TaskConfiguration pTaskConfig,
+                             TaskContainer<?> pParentContainer,
+                             Handler pUIQueue)
         {
             super();
             mTask = pTask;
@@ -242,6 +210,7 @@ public class TaskManagerAndroid implements TaskManager
             mTaskConfig = pTaskConfig;
             mIsInner = (pTask.getClass().getEnclosingClass() != null && !Modifier.isStatic(pTask.getClass().getModifiers()));
             mParentContainer = pParentContainer;
+            mUIQueue = pUIQueue;
 
             mResult = null;
             mThrowable = null;
@@ -372,21 +341,41 @@ public class TaskManagerAndroid implements TaskManager
             } catch (final Exception eException) {
                 mThrowable = eException;
             } finally {
-                TaskManagerAndroid.this.finish(this);
+                mUIQueue.post(new Runnable() {
+                    public void run()
+                    {
+                        mProcessed = true;
+                        if (finish()) {
+                            TaskManagerAndroid.this.notifyFinished(TaskContainer.this);
+                        }
+                    }
+                });
             }
         }
 
         /**
-         * Execute task termination handlers (i.e. onFinish and onFail).
+         * Try to execute task termination handlers (i.e. onFinish and onFail). The latter may not be executed if at least one of
+         * the outer object reference cannot be restored. When the task is effectively finished, set the corresponding flag to
+         * prevent any other invokation. That way, finish() can be called at any time:
+         * <ul>
+         * <li>When task isn't finished yet, in which case nothing happens. This can occur if a new instance of the emitter
+         * becomes managed while task is still executing: the task manager try to call finish on all tasks.</li>
+         * <li>When task has just finished, i.e. finish is called from the computation thread, and its emitter is available. In
+         * this case, the flag is set to true and task final callback is triggered.</li>
+         * <li>When task has just finished but its emitter is not available yet, i.e. it has been unmanaged. In this case, the
+         * flag is set to true but task final callback is NOT triggered. it will be triggered later when a new emitter (with the
+         * same Id) becomes managed.</li>
+         * <li>When an emitter with the same Id as the previously managed-then-unmanaged one becomes managed. In this case the
+         * flag is already true but the final task callback may have not been called yet (i.e. if mFinished is false). This can be
+         * done now. Note hat it is possible to have finish() called several times since there may be a delay between finish()
+         * call and execution as it is posted on the UI Thread.</li>
+         * </ul>
          * 
-         * @param pConfirmProcessed True to indicate that the task has finished its computation or False if we don't know.
          * @return True if the task could be finished and its termination handlers executed or false otherwise.
          */
-        protected boolean finish(boolean pConfirmProcessed)
+        protected boolean finish()
         {
-            if (pConfirmProcessed) mProcessed = true;
-
-            // Execute task termination handlers if they have not been yet (but only if the task has been fully executed).
+            // Execute task termination handlers if they have not been yet (but only if the task has been fully processed).
             if (!mProcessed || mFinished) return false;
             // Try to restore the emitter reference. If we can't, ask the configuration what to do.
             if (!referenceEmitter() && mTaskConfig.keepResultOnHold()) return false;
@@ -463,7 +452,9 @@ public class TaskManagerAndroid implements TaskManager
                 if (pProgress == mTask) mProgressRunnable = lProgressRunnable;
             }
 
-            TaskManagerAndroid.this.notifyProgress(lProgressRunnable);
+            // Progress is always executed on the UI-Thread but sent from a non-UI-Thread (except if calledfrom onFinish() or
+            // onFail() but that shouldn't occur often).
+            mUIQueue.post(lProgressRunnable);
         }
 
         @Override
@@ -473,7 +464,7 @@ public class TaskManagerAndroid implements TaskManager
             if (pOther == null) return false;
             if (getClass() != pOther.getClass()) return false;
 
-            TaskContainerAndroid<?> lOtherContainer = (TaskContainerAndroid<?>) pOther;
+            TaskContainer<?> lOtherContainer = (TaskContainer<?>) pOther;
             // Check equality on the user-defined task Id if possible.
             if (mTaskId != null) {
                 return mTaskId.equals(lOtherContainer.mTaskId);
