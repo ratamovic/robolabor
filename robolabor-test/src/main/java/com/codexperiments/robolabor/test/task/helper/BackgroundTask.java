@@ -1,5 +1,6 @@
 package com.codexperiments.robolabor.test.task.helper;
 
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.junit.Assert.assertThat;
@@ -41,6 +42,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
 
     public Integer onProcess(TaskManager pTaskManager) throws Exception
     {
+        assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure task is executed only once.
         pTaskManager.notifyProgress(this);
         Thread.sleep(TASK_DURATION);
         return mTaskResult;
@@ -60,10 +62,15 @@ public class BackgroundTask implements ProgressiveTask<Integer>
                 assertThat(getEmitter(), not(nullValue()));
             }
         }
+
+        // Save result.
         mTaskResult = pTaskResult;
         if (getEmitter() != null) {
             setResult(mTaskResult, null);
         }
+
+        // Notify listeners that task execution is finished.
+        assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure termination handler is executed only once.
         mTaskFinished.countDown();
     }
 
@@ -71,6 +78,8 @@ public class BackgroundTask implements ProgressiveTask<Integer>
     {
         mTaskException = pTaskException;
         setResult(null, mTaskException);
+
+        assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure termination handler is executed only once.
         mTaskFinished.countDown();
     }
 
@@ -84,6 +93,12 @@ public class BackgroundTask implements ProgressiveTask<Integer>
         return mTaskException;
     }
 
+    public void reset(Integer pTaskResult)
+    {
+        mTaskFinished = new CountDownLatch(1);
+        mTaskResult = pTaskResult;
+    }
+
     public boolean await()
     {
         try {
@@ -94,11 +109,17 @@ public class BackgroundTask implements ProgressiveTask<Integer>
         }
     }
 
+    /**
+     * Override in child classes to handle "inner tasks".
+     * 
+     * @return Task emitter (i.e. the outer class containing the task).
+     */
     public Object getEmitter()
     {
         return null;
     }
 
+    @Deprecated
     public void setResult(Integer pTaskResult, Throwable pTaskException)
     {
     }

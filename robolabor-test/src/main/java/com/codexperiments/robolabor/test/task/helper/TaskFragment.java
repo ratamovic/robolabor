@@ -8,7 +8,6 @@ import android.view.ViewGroup;
 
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.test.R;
-import com.codexperiments.robolabor.test.common.TestApplication;
 import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
 public class TaskFragment extends Fragment
@@ -38,7 +37,6 @@ public class TaskFragment extends Fragment
 
         mCheckEmitterNull = getArguments().getBoolean("CheckEmitterNull", false);
 
-        TestApplication.Instance.setCurrentFragment(this);
         TestApplicationContext lApplicationContext = TestApplicationContext.from(this);
         mTaskManager = lApplicationContext.getManager(TaskManager.class);
         mTaskManager.manage(this);
@@ -82,9 +80,13 @@ public class TaskFragment extends Fragment
 
     public BackgroundTask runInnerTask(final Integer pTaskResult)
     {
-        BackgroundTask lInnerBackgroundTask = new InnerBackgroundTask(pTaskResult, mCheckEmitterNull);
-
-        mTaskManager.execute(lInnerBackgroundTask);
+        final BackgroundTask lInnerBackgroundTask = new InnerBackgroundTask(pTaskResult, mCheckEmitterNull);
+        getActivity().runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.execute(lInnerBackgroundTask);
+            }
+        });
         return lInnerBackgroundTask;
     }
 

@@ -47,15 +47,4 @@ public class TestApplication extends Application implements TestApplicationConte
         Log.d(getClass().getSimpleName(), "setCurrentActivity " + pCurrentActivity);
         mCurrentActivity = pCurrentActivity;
     }
-
-    public Fragment getCurrentFragment()
-    {
-        return mCurrentFragment;
-    }
-
-    public void setCurrentFragment(Fragment pCurrentFragment)
-    {
-        Log.d(getClass().getSimpleName(), "setCurrentFragment " + pCurrentFragment);
-        mCurrentFragment = pCurrentFragment;
-    }
 }

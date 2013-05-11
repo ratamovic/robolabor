@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
 
+import com.codexperiments.robolabor.task.TaskIdentity;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.TestApplicationContext;
@@ -74,26 +75,61 @@ public class TaskActivity extends FragmentActivity
     public BackgroundTask runInnerTask(final Integer pTaskResult)
     {
         final Boolean lCheckEmitterNull = Boolean.valueOf(getIntent().getBooleanExtra("CheckEmitterNull", false));
-        BackgroundTask lInnerBackgroundTask = new InnerBackgroundTask(pTaskResult, lCheckEmitterNull);
+        final BackgroundTask lBackgroundTask = new InnerBackgroundTask(pTaskResult, lCheckEmitterNull);
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.execute(lBackgroundTask);
+            }
+        });
+        return lBackgroundTask;
+    }
 
-        mTaskManager.execute(lInnerBackgroundTask);
-        return lInnerBackgroundTask;
+    public BackgroundTask runInnerTaskWithId(final Integer pTaskId, final Integer pTaskResult)
+    {
+        final Boolean lCheckEmitterNull = Boolean.valueOf(getIntent().getBooleanExtra("CheckEmitterNull", false));
+        final BackgroundTask lBackgroundTask = new InnerBackgroundTaskWithId(pTaskId, pTaskResult, lCheckEmitterNull);
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.execute(lBackgroundTask);
+            }
+        });
+        return lBackgroundTask;
     }
 
     public BackgroundTask runStaticTask(final Integer pTaskResult)
     {
-        BackgroundTask lInnerBackgroundTask = new StaticBackgroundTask(pTaskResult, null);
-
-        mTaskManager.execute(lInnerBackgroundTask);
-        return lInnerBackgroundTask;
+        final BackgroundTask lBackgroundTask = new StaticBackgroundTask(pTaskResult, null);
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.execute(lBackgroundTask);
+            }
+        });
+        return lBackgroundTask;
     }
 
     public BackgroundTask runStandardTask(final Integer pTaskResult)
     {
-        BackgroundTask lInnerBackgroundTask = new BackgroundTask(pTaskResult, null);
+        final BackgroundTask lBackgroundTask = new BackgroundTask(pTaskResult, null);
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.execute(lBackgroundTask);
+            }
+        });
+        return lBackgroundTask;
+    }
 
-        mTaskManager.execute(lInnerBackgroundTask);
-        return lInnerBackgroundTask;
+    public void rerunTask(final BackgroundTask pBackgroundTask)
+    {
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.execute(pBackgroundTask);
+            }
+        });
     }
 
     public Integer getTaskResult()
@@ -139,6 +175,23 @@ public class TaskActivity extends FragmentActivity
         {
             TaskActivity.this.mTaskResult = pTaskResult;
             TaskActivity.this.mTaskException = pTaskException;
+        }
+    }
+
+    private class InnerBackgroundTaskWithId extends InnerBackgroundTask implements TaskIdentity
+    {
+        private Integer mTaskId;
+
+        public InnerBackgroundTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckOwnerIsNull)
+        {
+            super(pTaskResult, pCheckOwnerIsNull);
+            mTaskId = pTaskId;
+        }
+
+        @Override
+        public Object getId()
+        {
+            return mTaskId;
         }
     }
 

@@ -35,6 +35,11 @@ public class TaskManagerException extends RuntimeException
         return new TaskManagerException("Invalid task %1$s : %2$s", pTask, pComplement);
     }
 
+    public static TaskManagerException mustBeExecutedFromUIThread()
+    {
+        return new TaskManagerException("This method must be executed from the UI-Thread only");
+    }
+
     public static TaskManagerException notCalledFromTask()
     {
         return new TaskManagerException("This operation must be called inside a task.");
