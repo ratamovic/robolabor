@@ -2,16 +2,28 @@ package com.codexperiments.robolabor.test.common;
 
 import android.app.Activity;
 import android.app.Application;
-import android.support.v4.app.Fragment;
-import android.util.Log;
 
 public class TestApplication extends Application implements TestApplicationContext.Provider
 {
-    public static volatile TestApplication Instance;
+    private static volatile TestApplication sInstance;
 
     private TestApplicationContext mApplicationContext;
     private Activity mCurrentActivity;
-    private Fragment mCurrentFragment;
+
+    public static TestApplication getInstance(final TestCase<?> pTestCase)
+    {
+        // Patch to synchronize Application and Test initialization, as Application initialization occurs
+        // on the main thread whereas Test initialization occurs on the Instrumentation thread...
+        while (TestApplication.sInstance == null) {
+            pTestCase.getInstrumentation().runOnMainSync(new Runnable() {
+                public void run()
+                {
+                    // No op.
+                }
+            });
+        }
+        return TestApplication.sInstance;
+    }
 
     public TestApplication()
     {
@@ -22,8 +34,8 @@ public class TestApplication extends Application implements TestApplicationConte
     public void onCreate()
     {
         super.onCreate();
-        Instance = this;
         mApplicationContext = new TestApplicationContext(this);
+        sInstance = this;
     }
 
     @Override
@@ -32,19 +44,13 @@ public class TestApplication extends Application implements TestApplicationConte
         return mApplicationContext;
     }
 
-    public void setApplicationContext(TestApplicationContext pApplicationContext)
-    {
-        mApplicationContext = pApplicationContext;
-    }
-
-    public Activity getCurrentActivity()
+    protected Activity getCurrentActivity()
     {
         return mCurrentActivity;
     }
 
-    public void setCurrentActivity(Activity pCurrentActivity)
+    protected void setCurrentActivity(Activity pCurrentActivity)
     {
-        Log.d(getClass().getSimpleName(), "setCurrentActivity " + pCurrentActivity);
         mCurrentActivity = pCurrentActivity;
     }
 }

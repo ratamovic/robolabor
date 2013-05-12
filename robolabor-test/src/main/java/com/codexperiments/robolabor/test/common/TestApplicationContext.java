@@ -11,81 +11,33 @@ public class TestApplicationContext
 {
     private List<Object> mManagers;
 
-    // private int mStartCounter;
-
-    // private Application mApplication;
-
-    public static TestApplicationContext from(Application pApplication)
-    {
-        if ((pApplication != null) && (pApplication instanceof Provider)) {
-            return ((Provider) pApplication).provideContext();
-        }
-        throw TestException.invalidConfiguration("Could not retrieve application context from Fragment");
-    }
-
     public static TestApplicationContext from(Activity pActivity)
     {
-        TestApplication.Instance.setCurrentActivity(pActivity);
-        if (pActivity != null) {
-            Application application = pActivity.getApplication();
-            if ((application != null) && (application instanceof Provider)) {
-                return ((Provider) application).provideContext();
-            }
-        }
-        throw TestException.invalidConfiguration("Could not retrieve application context from Activity");
+        TestApplication lApplication = (TestApplication) pActivity.getApplication();
+        // We assume all activities will need to get the Application context during initialization (to get a manager or
+        // something). Thus, at this point in the code, we can assume a new activity has just been created and so register it.
+        // I see no other way to save the current activity (except making registration explicit since here it's a bit implicit).
+        lApplication.setCurrentActivity(pActivity);
+        return lApplication.provideContext();
     }
 
     public static TestApplicationContext from(Fragment pFragment)
     {
-        if (pFragment != null) {
-            Activity lActivity = pFragment.getActivity();
-            if (lActivity != null) {
-                Application lApplication = lActivity.getApplication();
-                if ((lApplication != null) && (lApplication instanceof Provider)) {
-                    return ((Provider) lApplication).provideContext();
-                }
-            }
-        }
-        throw TestException.invalidConfiguration("Could not retrieve application context from Activity");
+        Activity lActivity = pFragment.getActivity();
+        TestApplication lApplication = (TestApplication) lActivity.getApplication();
+        return lApplication.provideContext();
     }
 
     public static TestApplicationContext from(android.app.Service pService)
     {
-        if (pService != null) {
-            Application application = pService.getApplication();
-            if ((application != null) && (application instanceof Provider)) {
-                return ((Provider) application).provideContext();
-            }
-        }
-        throw TestException.invalidConfiguration("Could not retrieve application context from Application");
+        TestApplication lApplication = (TestApplication) pService.getApplication();
+        return lApplication.provideContext();
     }
 
     public TestApplicationContext(Application pApplication)
     {
         super();
-        // mApplication = pApplication;
         mManagers = new ArrayList<Object>(20);
-        // mStartCounter = 0;
-    }
-
-    public void start()
-    {
-        // If another activity is launched, start() of the 2nd activity will be called before the stop() of the 1st.
-        // Hence we need a counter to ensure we restart() services properly in this case. This was especially
-        // problematic because EventBus listeners were removed right after they were added...
-        // if (mStartCounter > 0) {
-        // doStop();
-        // }
-        // doStart();
-        // ++mStartCounter;
-    }
-
-    public void stop()
-    {
-        // --mStartCounter;
-        // if (mStartCounter == 0) {
-        // doStop();
-        // }
     }
 
     public void registerManager(Object pManager)
@@ -117,6 +69,7 @@ public class TestApplicationContext
         }
         throw TestException.unknownManager(pManagerClass);
     }
+
 
     public interface Provider
     {

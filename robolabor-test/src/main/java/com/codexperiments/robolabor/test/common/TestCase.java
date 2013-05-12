@@ -14,12 +14,13 @@ import android.test.ActivityInstrumentationTestCase2;
 
 public class TestCase<TActivity extends Activity> extends ActivityInstrumentationTestCase2<TActivity>
 {
-    protected TestApplication mApplication;
-    protected TestApplicationContext mApplicationContext;
+    private Class<?> mActivityClass;
+    private TestApplication mApplication;
+    private TestApplicationContext mApplicationContext;
 
-    public TestCase(Class<TActivity> activityClass)
+    public TestCase(Class<TActivity> pActivityClass)
     {
-        super(activityClass);
+        super(pActivityClass);
     }
 
     @Override
@@ -27,65 +28,72 @@ public class TestCase<TActivity extends Activity> extends ActivityInstrumentatio
     {
         super.setUp();
 
-        // Patch to synchronize Application and Test initialization, as Application initialization occurs
-        // on the main thread whereas Test initialization occurs on the Instrumentation thread...
-        while (TestApplication.Instance == null) {
-            getInstrumentation().runOnMainSync(new Runnable() {
-                public void run()
-                {
-                    // No op.
-                }
-            });
-        }
-
-        mApplication = TestApplication.Instance;
-        mApplicationContext = new TestApplicationContext(mApplication);
-        mApplication.setApplicationContext(mApplicationContext);
+        mApplication = TestApplication.getInstance(this);
+        mApplicationContext = mApplication.provideContext();
 
         // Execute initialization code on UI Thread.
-        final List<Exception> throwableHolder = new ArrayList<Exception>(1);
+        final List<Exception> lThrowableHolder = new ArrayList<Exception>(1);
         getInstrumentation().runOnMainSync(new Runnable() {
             public void run()
             {
                 try {
                     setUpOnUIThread();
                 } catch (Exception eException) {
-                    throwableHolder.add(eException);
+                    lThrowableHolder.add(eException);
                 }
             }
         });
         // If an exception occurred during UI Thread initialization, re-throw the exception.
-        if (throwableHolder.size() > 0) {
-            throw throwableHolder.get(1);
+        if (lThrowableHolder.size() > 0) {
+            throw lThrowableHolder.get(0);
         }
-    }
-
-    public TActivity getActivity(Intent pIntent)
-    {
-        setActivityIntent(pIntent);
-        return super.getActivity();
-    }
-
-    protected void setUpOnUIThread() throws Exception
-    {
     }
 
     @Override
     protected void tearDown() throws Exception
     {
         super.tearDown();
-        TestApplication.Instance.setCurrentActivity(null);
+        mApplication.setCurrentActivity(null);
+        mApplicationContext.removeManagers();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public TActivity getActivity()
+    {
+        Activity lActivity = mApplication.getCurrentActivity();
+        if (lActivity == null) {
+            TActivity lNewActivity = super.getActivity();
+            mActivityClass = lNewActivity.getClass();
+            mApplication.setCurrentActivity(lActivity);
+            return lNewActivity;
+        } else {
+            if (mActivityClass.isInstance(lActivity)) {
+                return (TActivity) lActivity;
+            } else {
+                throw TestException.wrongActivity(lActivity);
+            }
+        }
+    }
+
+    public TActivity getActivity(Intent pIntent)
+    {
+        setActivityIntent(pIntent);
+        return getActivity();
     }
 
     @SuppressWarnings("unchecked")
-    protected TActivity getCurrentActivity()
+    public <TOtherActivity extends Activity> TOtherActivity getOtherActivity(Class<TOtherActivity> pOtherActivityClass)
     {
-        return (TActivity) TestApplication.Instance.getCurrentActivity();
+        return (TOtherActivity) mApplication.getCurrentActivity();
     }
 
-    protected void recreateActivitySeveralTimes(int pCount) throws InterruptedException
+    protected void setUpOnUIThread() throws Exception
     {
-        Activity lActivity = getActivity();
+    }
+
+    protected void rotateActivitySeveralTimes(int pCount) throws InterruptedException
+    {
         for (int i = 0; i < pCount; ++i) {
             // Wait some time before turning.
             sleep(500);
@@ -93,19 +101,28 @@ public class TestCase<TActivity extends Activity> extends ActivityInstrumentatio
             Resources lResources = getInstrumentation().getTargetContext().getResources();
             Configuration lConfiguration = lResources.getConfiguration();
             if (lConfiguration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                lActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                mApplication.getCurrentActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
             } else {
-                lActivity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+                mApplication.getCurrentActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
             }
         }
     }
 
     protected TActivity terminateActivity(TActivity pActivity) throws InterruptedException
     {
-        TActivity lActivity = pActivity;
-        lActivity.finish();
+        pActivity.finish();
         setActivity(null);
-        TestApplication.Instance.setCurrentActivity(null);
+        mApplication.setCurrentActivity(null);
         return null;
+    }
+
+    public TestApplication getApplication()
+    {
+        return mApplication;
+    }
+
+    public TestApplicationContext getApplicationContext()
+    {
+        return mApplicationContext;
     }
 }

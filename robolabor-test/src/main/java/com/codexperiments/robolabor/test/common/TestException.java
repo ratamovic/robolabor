@@ -1,9 +1,7 @@
 package com.codexperiments.robolabor.test.common;
 
-/**
- * Indicates a case that should never happen and which indicates a programming or configuration error (e.g. a reflection call
- * which fails), a default case that should never happen in a switch, etc.
- */
+import android.app.Activity;
+
 public class TestException extends RuntimeException
 {
     private static final long serialVersionUID = -4615749565432900659L;
@@ -18,25 +16,12 @@ public class TestException extends RuntimeException
         super(String.format(pMessage, pArguments), pThrowable);
     }
 
-    /**
-     * Indicates that an unexpected switch case or if/else case has occured.
-     */
-    public static TestException illegalCase()
+    public static TestException wrongActivity(Activity pActivity)
     {
-        return new TestException("Illegal case");
+        return new TestException("Wrong Activity type (%1$s). This may happen if tested activity navigated to another one.",
+                                 pActivity.getClass());
     }
 
-    /**
-     * Indicates that configuration is invalid.
-     */
-    public static TestException invalidConfiguration(String pMessage, Object... pArguments)
-    {
-        return new TestException(pMessage, pArguments);
-    }
-
-    /**
-     * Use this method when configuration is invalid.
-     */
     public static TestException unknownManager(Class<?> pManagerClass)
     {
         return new TestException("%1$s is not a registered service.", pManagerClass.getName());
