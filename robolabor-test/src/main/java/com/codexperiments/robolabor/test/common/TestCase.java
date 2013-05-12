@@ -65,7 +65,7 @@ public class TestCase<TActivity extends Activity> extends ActivityInstrumentatio
         if (lActivity == null) {
             TActivity lNewActivity = super.getActivity();
             mActivityClass = lNewActivity.getClass();
-            mApplication.setCurrentActivity(lActivity);
+            mApplication.setCurrentActivity(lNewActivity);
             return lNewActivity;
         } else {
             if (mActivityClass.isInstance(lActivity)) {

@@ -77,7 +77,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_inner_activityDestroyed() throws InterruptedException
     {
-        TaskActivity lInitialActivity = getActivity(TaskActivity.destroyableActivity());
+        TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
         BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
         lInitialActivity = terminateActivity(lInitialActivity);
         assertThat(lTask.awaitFinished(), equalTo(true));
@@ -134,7 +134,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_fragmentDestroyed_withId() throws InterruptedException
     {
-        TaskActivity lInitialActivity = getActivity(TaskActivity.destroyableActivity());
+        TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
         BackgroundTask lTask = lInitialActivity.getFragmentWithId().runInnerTask(mTaskResult);
         lInitialActivity = terminateActivity(lInitialActivity);
         assertThat(lTask.awaitFinished(), equalTo(true));
@@ -145,7 +145,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_fragmentDestroyed_withTag() throws InterruptedException
     {
-        TaskActivity lInitialActivity = getActivity(TaskActivity.destroyableActivity());
+        TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
         BackgroundTask lTask = lInitialActivity.getFragmentWithTag().runInnerTask(mTaskResult); // Look here.
         lInitialActivity = terminateActivity(lInitialActivity);
         assertThat(lTask.awaitFinished(), equalTo(true));
@@ -183,7 +183,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_static_emitterDestroyed() throws InterruptedException
     {
-        TaskActivity lInitialActivity = getActivity(TaskActivity.destroyableActivity());
+        TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
         BackgroundTask lTask = lInitialActivity.runStaticTask(mTaskResult);
         lInitialActivity = terminateActivity(lInitialActivity);
         assertThat(lTask.awaitFinished(), equalTo(true));
@@ -221,7 +221,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_standard_emitterDestroyed() throws InterruptedException
     {
-        TaskActivity lInitialActivity = getActivity(TaskActivity.destroyableActivity());
+        TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
         BackgroundTask lTask = lInitialActivity.runStandardTask(mTaskResult);
         lInitialActivity = terminateActivity(lInitialActivity);
         assertThat(lTask.awaitFinished(), equalTo(true));
@@ -275,8 +275,8 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_notifyProgress_noEmitterRecreation() throws InterruptedException
     {
-        TaskActivity lInitialActivity = getActivity();
-        BackgroundTask lTask = lInitialActivity.runInnerTaskStepByStep(mTaskResult);
+        TaskActivity lInitialActivity = getActivity(TaskActivity.stepByStep());
+        BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
 
         // Progress counter is incremented for each step.
         assertThat(lTask.awaitStepExecuted(), equalTo(true));
@@ -300,8 +300,8 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_notifyProgress_emitterRecreation() throws InterruptedException
     {
-        TaskActivity lInitialActivity = getActivity();
-        BackgroundTask lTask = lInitialActivity.runInnerTaskStepByStep(mTaskResult);
+        TaskActivity lInitialActivity = getActivity(TaskActivity.stepByStep());
+        BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
         assertThat(lTask.awaitStepExecuted(), equalTo(true));
         assertThat(lTask.awaitProgressExecuted(), equalTo(true));
         assertThat(lTask.getProgressCounter(), equalTo(1));
@@ -334,8 +334,8 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_notifyProgress_emitterDestroyed() throws InterruptedException
     {
-        TaskActivity lInitialActivity = getActivity(TaskActivity.destroyableActivity());
-        BackgroundTask lTask = lInitialActivity.runInnerTaskStepByStep(mTaskResult);
+        TaskActivity lInitialActivity = getActivity(TaskActivity.stepByStepDying());
+        BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
         assertThat(lTask.awaitStepExecuted(), equalTo(true));
         assertThat(lTask.awaitProgressExecuted(), equalTo(true));
         assertThat(lTask.getProgressCounter(), equalTo(1));

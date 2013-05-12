@@ -11,17 +11,33 @@ import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
 public class TaskActivity extends FragmentActivity
 {
-    @Deprecated
     private boolean mCheckEmitterNull;
+    private boolean mStepByStep;
 
     private TaskManager mTaskManager;
     private Integer mTaskResult;
     private Throwable mTaskException;
 
-    public static Intent destroyableActivity()
+    public static Intent dying()
+    {
+        return createIntent(true, false);
+    }
+
+    public static Intent stepByStep()
+    {
+        return createIntent(false, true);
+    }
+
+    public static Intent stepByStepDying()
+    {
+        return createIntent(true, true);
+    }
+
+    private static Intent createIntent(boolean pCheckEmitterNull, boolean pStepByStep)
     {
         Intent lIntent = new Intent();
-        lIntent.putExtra("CheckEmitterNull", true);
+        lIntent.putExtra("CheckEmitterNull", pCheckEmitterNull);
+        lIntent.putExtra("StepByStep", pStepByStep);
         return lIntent;
     }
 
@@ -32,6 +48,7 @@ public class TaskActivity extends FragmentActivity
         setContentView(R.layout.main);
 
         mCheckEmitterNull = getIntent().getBooleanExtra("CheckEmitterNull", false);
+        mStepByStep = getIntent().getBooleanExtra("StepByStep", false);
 
         TestApplicationContext lApplicationContext = TestApplicationContext.from(this);
         mTaskManager = lApplicationContext.getManager(TaskManager.class);
@@ -73,20 +90,9 @@ public class TaskActivity extends FragmentActivity
         pBundle.putSerializable("TaskResult", mTaskResult);
     }
 
-    public BackgroundTask runInnerTask(Integer pTaskResult)
+    public BackgroundTask runInnerTask(final Integer pTaskResult)
     {
-        return runInnerTask(pTaskResult, false);
-    }
-
-    public BackgroundTask runInnerTaskStepByStep(Integer pTaskResult)
-    {
-        return runInnerTask(pTaskResult, true);
-    }
-
-    private BackgroundTask runInnerTask(final Integer pTaskResult, boolean pStepByStep)
-    {
-        final Boolean lCheckEmitterNull = Boolean.valueOf(getIntent().getBooleanExtra("CheckEmitterNull", false));
-        final BackgroundTask lBackgroundTask = new InnerBackgroundTask(pTaskResult, lCheckEmitterNull, pStepByStep);
+        final BackgroundTask lBackgroundTask = new InnerBackgroundTask(pTaskResult, mCheckEmitterNull, mStepByStep);
         runOnUiThread(new Runnable() {
             public void run()
             {
@@ -98,8 +104,7 @@ public class TaskActivity extends FragmentActivity
 
     public BackgroundTask runInnerTaskWithId(final Integer pTaskId, final Integer pTaskResult)
     {
-        final Boolean lCheckEmitterNull = Boolean.valueOf(getIntent().getBooleanExtra("CheckEmitterNull", false));
-        final BackgroundTask lBackgroundTask = new InnerBackgroundTaskWithId(pTaskId, pTaskResult, lCheckEmitterNull, false);
+        final BackgroundTask lBackgroundTask = new InnerBackgroundTaskWithId(pTaskId, pTaskResult, mCheckEmitterNull, mStepByStep);
         runOnUiThread(new Runnable() {
             public void run()
             {
@@ -111,7 +116,7 @@ public class TaskActivity extends FragmentActivity
 
     public BackgroundTask runStaticTask(final Integer pTaskResult)
     {
-        final BackgroundTask lBackgroundTask = new StaticBackgroundTask(pTaskResult, null);
+        final BackgroundTask lBackgroundTask = new StaticBackgroundTask(pTaskResult, null, mStepByStep);
         runOnUiThread(new Runnable() {
             public void run()
             {
@@ -183,10 +188,21 @@ public class TaskActivity extends FragmentActivity
         }
 
         @Override
-        public void setResult(Integer pTaskResult, Throwable pTaskException)
+        public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
         {
-            TaskActivity.this.mTaskResult = pTaskResult;
-            TaskActivity.this.mTaskException = pTaskException;
+            if (getEmitter() != null) {
+                mTaskResult = pTaskResult;
+            }
+            super.onFinish(pTaskManager, pTaskResult);
+        }
+
+        @Override
+        public void onFail(TaskManager pTaskManager, Throwable pTaskException)
+        {
+            if (getEmitter() != null) {
+                mTaskException = pTaskException;
+            }
+            super.onFail(pTaskManager, pTaskException);
         }
     }
 
@@ -211,9 +227,9 @@ public class TaskActivity extends FragmentActivity
 
     private static class StaticBackgroundTask extends BackgroundTask
     {
-        public StaticBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull)
+        public StaticBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
         {
-            super(pTaskResult, pCheckOwnerIsNull, false);
+            super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
         }
     }
 }

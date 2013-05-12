@@ -19,6 +19,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
 {
     private static final int TASK_STEP_COUNT = 5;
     private static final int TASK_STEP_DURATION_MS = 1000;
+    // At least one test must wait until this delay has ended. So please avoid increasing it except for debugging purpose.
     private static final int TASK_STEP_TIMEOUT_MS = 10000;
     private static final int TASK_PROGRESS_TIMEOUT_MS = 2000;
 
@@ -96,10 +97,6 @@ public class BackgroundTask implements ProgressiveTask<Integer>
 
         // Save result.
         mTaskResult = pTaskResult;
-        if (getEmitter() != null) {
-            setResult(mTaskResult, null);
-        }
-
         // Notify listeners that task execution is finished.
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure termination handler is executed only once.
         mTaskFinished.countDown();
@@ -108,8 +105,6 @@ public class BackgroundTask implements ProgressiveTask<Integer>
     public void onFail(TaskManager pTaskManager, Throwable pTaskException)
     {
         mTaskException = pTaskException;
-        setResult(null, mTaskException);
-
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure termination handler is executed only once.
         mTaskFinished.countDown();
     }
@@ -236,10 +231,5 @@ public class BackgroundTask implements ProgressiveTask<Integer>
     public Object getEmitter()
     {
         return null;
-    }
-
-    @Deprecated
-    public void setResult(Integer pTaskResult, Throwable pTaskException)
-    {
     }
 }
