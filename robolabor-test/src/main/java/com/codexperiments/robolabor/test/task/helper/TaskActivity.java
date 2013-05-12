@@ -11,6 +11,7 @@ import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
 public class TaskActivity extends FragmentActivity
 {
+    @Deprecated
     private boolean mCheckEmitterNull;
 
     private TaskManager mTaskManager;
@@ -72,10 +73,20 @@ public class TaskActivity extends FragmentActivity
         pBundle.putSerializable("TaskResult", mTaskResult);
     }
 
-    public BackgroundTask runInnerTask(final Integer pTaskResult)
+    public BackgroundTask runInnerTask(Integer pTaskResult)
+    {
+        return runInnerTask(pTaskResult, false);
+    }
+
+    public BackgroundTask runInnerTaskStepByStep(Integer pTaskResult)
+    {
+        return runInnerTask(pTaskResult, true);
+    }
+
+    private BackgroundTask runInnerTask(final Integer pTaskResult, boolean pStepByStep)
     {
         final Boolean lCheckEmitterNull = Boolean.valueOf(getIntent().getBooleanExtra("CheckEmitterNull", false));
-        final BackgroundTask lBackgroundTask = new InnerBackgroundTask(pTaskResult, lCheckEmitterNull);
+        final BackgroundTask lBackgroundTask = new InnerBackgroundTask(pTaskResult, lCheckEmitterNull, pStepByStep);
         runOnUiThread(new Runnable() {
             public void run()
             {
@@ -88,7 +99,7 @@ public class TaskActivity extends FragmentActivity
     public BackgroundTask runInnerTaskWithId(final Integer pTaskId, final Integer pTaskResult)
     {
         final Boolean lCheckEmitterNull = Boolean.valueOf(getIntent().getBooleanExtra("CheckEmitterNull", false));
-        final BackgroundTask lBackgroundTask = new InnerBackgroundTaskWithId(pTaskId, pTaskResult, lCheckEmitterNull);
+        final BackgroundTask lBackgroundTask = new InnerBackgroundTaskWithId(pTaskId, pTaskResult, lCheckEmitterNull, false);
         runOnUiThread(new Runnable() {
             public void run()
             {
@@ -112,7 +123,7 @@ public class TaskActivity extends FragmentActivity
 
     public BackgroundTask runStandardTask(final Integer pTaskResult)
     {
-        final BackgroundTask lBackgroundTask = new BackgroundTask(pTaskResult, null);
+        final BackgroundTask lBackgroundTask = new BackgroundTask(pTaskResult, null, false);
         runOnUiThread(new Runnable() {
             public void run()
             {
@@ -157,11 +168,12 @@ public class TaskActivity extends FragmentActivity
         return (TaskFragment) getSupportFragmentManager().findFragmentById(0);
     }
 
+
     private class InnerBackgroundTask extends BackgroundTask
     {
-        public InnerBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull)
+        public InnerBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
         {
-            super(pTaskResult, pCheckOwnerIsNull);
+            super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
         }
 
         @Override
@@ -178,13 +190,14 @@ public class TaskActivity extends FragmentActivity
         }
     }
 
+
     private class InnerBackgroundTaskWithId extends InnerBackgroundTask implements TaskIdentity
     {
         private Integer mTaskId;
 
-        public InnerBackgroundTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckOwnerIsNull)
+        public InnerBackgroundTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
         {
-            super(pTaskResult, pCheckOwnerIsNull);
+            super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
             mTaskId = pTaskId;
         }
 
@@ -195,11 +208,12 @@ public class TaskActivity extends FragmentActivity
         }
     }
 
+
     private static class StaticBackgroundTask extends BackgroundTask
     {
         public StaticBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull)
         {
-            super(pTaskResult, pCheckOwnerIsNull);
+            super(pTaskResult, pCheckOwnerIsNull, false);
         }
     }
 }

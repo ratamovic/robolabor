@@ -14,6 +14,7 @@ public class TaskFragment extends Fragment
 {
     private View mView;
 
+    @Deprecated
     private boolean mCheckEmitterNull;
 
     private TaskManager mTaskManager;
@@ -100,11 +101,12 @@ public class TaskFragment extends Fragment
         return mTaskException;
     }
 
+
     private class InnerBackgroundTask extends BackgroundTask
     {
         public InnerBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull)
         {
-            super(pTaskResult, pCheckOwnerIsNull);
+            super(pTaskResult, pCheckOwnerIsNull, false);
         }
 
         @Override
