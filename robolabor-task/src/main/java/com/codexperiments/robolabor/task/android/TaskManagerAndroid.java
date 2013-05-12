@@ -168,6 +168,7 @@ public class TaskManagerAndroid implements TaskManager
         mContainers.remove(pContainer);
     }
 
+
     /**
      * TODO Explain why we implement TaskManager.
      * 
@@ -279,7 +280,7 @@ public class TaskManagerAndroid implements TaskManager
          * @param pTask Task to dereference.
          * @return Id of the emitter.
          */
-        private final void dereferenceEmitter()
+        private void dereferenceEmitter()
         {
             try {
                 // Dereference the parent emitter.
@@ -302,7 +303,7 @@ public class TaskManagerAndroid implements TaskManager
          * @return True if restoration could be performed properly. This may be false if a previously managed object become
          *         unmanaged meanwhile.
          */
-        private final boolean referenceEmitter()
+        private boolean referenceEmitter()
         {
             try {
                 if (mIsInner) {
@@ -430,8 +431,8 @@ public class TaskManagerAndroid implements TaskManager
         public void notifyProgress(final TaskProgress pProgress)
         {
             Runnable lProgressRunnable;
-            // Optimization to avoid allocating a runnable each time we want to handle progress from the task itself.
-            if ((pProgress == mTask) && (mProgressRunnable != null)) {
+            // @violations off: Optimization to avoid allocating a runnable each time progress is handled from the task itself.
+            if ((pProgress == mTask) && (mProgressRunnable != null)) { // @violations on
                 lProgressRunnable = mProgressRunnable;
             }
             // Create a runnable to handle task progress and reference/dereference properly the task before/after task execution.
@@ -448,8 +449,8 @@ public class TaskManagerAndroid implements TaskManager
                         }
                     }
                 };
-                // Cache progress runnable if progress is handled from the task itself.
-                if (pProgress == mTask) mProgressRunnable = lProgressRunnable;
+                // @violations off : Optimization that caches progress runnable if progress is handled from the task itself.
+                if (pProgress == mTask) mProgressRunnable = lProgressRunnable; // @violations on
             }
 
             // Progress is always executed on the UI-Thread but sent from a non-UI-Thread (except if calledfrom onFinish() or
@@ -492,6 +493,7 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
+
     /**
      * Not thread-safe.
      */
@@ -501,6 +503,7 @@ public class TaskManagerAndroid implements TaskManager
 
         TaskConfiguration resolveConfiguration(Task<?> pTask);
     }
+
 
     /**
      * Not thread-safe.

@@ -5,9 +5,12 @@ import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.junit.Assert.assertThat;
+import android.test.UiThreadTest;
 
 import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManager;
+import com.codexperiments.robolabor.task.TaskProgress;
+import com.codexperiments.robolabor.task.TaskResult;
 import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerException;
 import com.codexperiments.robolabor.task.android.configuration.DefaultConfiguration;
@@ -295,7 +298,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lFinalActivity.getTaskException(), nullValue());
     }
 
-    public void testExecute_inner_progress() throws InterruptedException
+    public void testExecute_inner_notifyProgress() throws InterruptedException
     {
         TaskActivity lInitialActivity = getActivity();
         BackgroundTask lTask = lInitialActivity.runInnerTaskStepByStep(mTaskResult);
@@ -327,20 +330,11 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lFinalActivity.getTaskException(), nullValue());
     }
 
-    public void testExecute_taskNotExecutedFromUIThread() throws InterruptedException
+    public void testExecute_notifyProgressNotFromATask() throws InterruptedException
     {
         try {
-            mTaskManager.execute(new Task<Integer>() {
-                public Integer onProcess(TaskManager pTaskManager) throws Exception
-                {
-                    return null;
-                }
-
-                public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
-                {
-                }
-
-                public void onFail(TaskManager pTaskManager, Throwable pTaskException)
+            mTaskManager.notifyProgress(new TaskProgress() {
+                public void onProgress(TaskManager pArg0)
                 {
                 }
             });
@@ -350,6 +344,60 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         }
     }
 
+    public void testExecute_notCalledFromUIThread() throws InterruptedException
+    {
+        try {
+            mTaskManager.execute(new Task<Integer>() {
+
+                public Integer onProcess(TaskManager pArg0) throws Exception
+                {
+                    return null;
+                }
+
+                public void onFinish(TaskManager pArg0, Integer pArg1)
+                {
+                }
+
+                public void onFail(TaskManager pArg0, Throwable pArg1)
+                {
+                }
+            });
+            fail();
+        } catch (TaskManagerException eTaskManagerException) {
+            // Success
+        }
+
+        try {
+            mTaskManager.listen(new TaskResult<Integer>() {
+                public void onFinish(TaskManager pArg0, Integer pArg1)
+                {
+                }
+
+                public void onFail(TaskManager pArg0, Throwable pArg1)
+                {
+                }
+            });
+            fail();
+        } catch (TaskManagerException eTaskManagerException) {
+            // Success
+        }
+
+        try {
+            mTaskManager.manage(new Object());
+            fail();
+        } catch (TaskManagerException eTaskManagerException) {
+            // Success
+        }
+
+        try {
+            mTaskManager.unmanage(new Object());
+            fail();
+        } catch (TaskManagerException eTaskManagerException) {
+            // Success
+        }
+    }
+
+    @UiThreadTest
     public void testExecute_taskNull() throws InterruptedException
     {
         try {

@@ -97,6 +97,7 @@
                 <sonar.emma.reportPath>target/emma/</sonar.emma.reportPath>
                 <sonar.skippedModules>robolabor-task</sonar.skippedModules>
                 <sonar.surefire.reportsPath>target/surefire-reports</sonar.surefire.reportsPath>
+                <sonar.switchoffviolations.block>@violations off;@violations on</sonar.switchoffviolations.block>
                 <sonar.exclusions>**/R.java,**/BuildConfig.java,**/test/**/*.java</sonar.exclusions>
             </properties>
         </profile>
