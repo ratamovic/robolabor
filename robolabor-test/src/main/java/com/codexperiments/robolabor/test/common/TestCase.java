@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -57,6 +58,12 @@ public class TestCase<TActivity extends Activity> extends ActivityInstrumentatio
         if (throwableHolder.size() > 0) {
             throw throwableHolder.get(1);
         }
+    }
+
+    public TActivity getActivity(Intent pIntent)
+    {
+        setActivityIntent(pIntent);
+        return super.getActivity();
     }
 
     protected void setUpOnUIThread() throws Exception
