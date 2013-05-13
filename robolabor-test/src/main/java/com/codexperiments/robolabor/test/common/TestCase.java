@@ -116,6 +116,19 @@ public class TestCase<TActivity extends Activity> extends ActivityInstrumentatio
         return null;
     }
 
+    protected void garbageCollect() throws InterruptedException
+    {
+        for (int i = 0; i < 3; ++i) {
+            System.gc();
+            getInstrumentation().runOnMainSync(new Runnable() {
+                public void run()
+                {
+                    System.gc();
+                }
+            });
+        }
+    }
+
     public TestApplication getApplication()
     {
         return mApplication;

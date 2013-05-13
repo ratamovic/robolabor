@@ -19,7 +19,27 @@ public class DefaultConfiguration implements ManagerConfiguration
      * Task configuration to execute tasks one by one in the order they were submitted, like a queue. This emulates the AsyncTask
      * behavior used since Android Gingerbread.
      */
-    private TaskConfiguration mSerialConfiguration = buildTaskConfiguration();
+    private TaskConfiguration mSerialConfiguration;
+    private Class<?> mFragmentClass;
+    private Class<?> mFragmentCompatClass;
+
+    public DefaultConfiguration()
+    {
+        super();
+        mSerialConfiguration = buildTaskConfiguration();
+
+        ClassLoader lClassLoader = getClass().getClassLoader();
+        try {
+            mFragmentClass = Class.forName("android.app.Fragment", false, lClassLoader);
+        } catch (ClassNotFoundException eClassNotFoundException) {
+            // Current platform doesn't seem to support fragments.
+        }
+        try {
+            mFragmentCompatClass = Class.forName("android.support.v4.app.Fragment", false, lClassLoader);
+        } catch (ClassNotFoundException eClassNotFoundException) {
+            // Current application doesn't embed compatibility library.
+        }
+    }
 
     /**
      * Create an instance of the executor used to execute tasks. Returned executor is single-threaded and executes tasks
@@ -70,10 +90,10 @@ public class DefaultConfiguration implements ManagerConfiguration
 
         if (pEmitter instanceof Activity) {
             return resolveActivityId((Activity) pEmitter);
-        } else if (pEmitter instanceof android.support.v4.app.Fragment) {
-            return resolveFragmentId((android.support.v4.app.Fragment) pEmitter);
-        } else if (pEmitter instanceof android.app.Fragment) {
+        } else if (mFragmentClass != null && mFragmentClass.isInstance(pEmitter)) {
             return resolveFragmentId((android.app.Fragment) pEmitter);
+        } else if (mFragmentCompatClass != null && mFragmentCompatClass.isInstance(pEmitter)) {
+            return resolveFragmentId((android.support.v4.app.Fragment) pEmitter);
         }
         return resolveDefaultId(pEmitter);
     }
@@ -98,7 +118,7 @@ public class DefaultConfiguration implements ManagerConfiguration
      * @param pFragment Fragment to find the Id of.
      * @return Fragment Id if not 0, Fragment Tag if not empty or else its Fragment class.
      */
-    protected Object resolveFragmentId(android.support.v4.app.Fragment pFragment)
+    protected Object resolveFragmentId(android.app.Fragment pFragment)
     {
         if (pFragment.getId() > 0) {
             // TODO An Integer Id is not something unique. Need to append the class type too.
@@ -117,7 +137,7 @@ public class DefaultConfiguration implements ManagerConfiguration
      * @param pFragment Fragment to find the Id of.
      * @return Fragment Id if not 0, Fragment Tag if not empty or else its Fragment class.
      */
-    protected Object resolveFragmentId(android.app.Fragment pFragment)
+    protected Object resolveFragmentId(android.support.v4.app.Fragment pFragment)
     {
         if (pFragment.getId() > 0) {
             // TODO An Integer Id is not something unique. Need to append the class type too.

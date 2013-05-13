@@ -3,14 +3,25 @@ package com.codexperiments.robolabor.task;
 public interface TaskResult<TResult>
 {
     /**
-     * Si l'exécution de onProgress() se termine correctement, alors onFinish() est appelé sur le thread UI. C'est ici que doivent
-     * être modifiés les objets liés à l'UI (ex: fusion des résultats de la tâche avec les résultats déjà affichés).
+     * Handler method called when task computation has finished correctly. This method is called on the UI Thread. This is where
+     * objects or components related to the UI should be updated (e.g. merging data with existing results on screens). It is safe
+     * to call any outer class from here.
+     * 
+     * TODO Explain what happen if reference is not restored.
+     * 
+     * @param pTaskManager Use this TaskManager to perform any operation from the handler.
      */
     void onFinish(TaskManager pTaskManager, TResult pTaskResult);
 
     /**
-     * Si l'exécution de onProgress() échoue, onFail() est alors appelé sur le thread UI. Tout message d'erreur ou
-     * modification/effacement des données affichées dans l'UI doivent être réalisé ici.
+     * Handler method called when task computation has failed during execution or in the onFinish() handler. This method is called
+     * on the UI Thread. This is where objects or components related to the UI should be updated (e.g. display of an error
+     * message). The given exception is the one that cause the failure (i.e. there is no encaspulation). It is safe to call any
+     * outer class from here.
+     * 
+     * TODO Explain what happen if reference is not restored.
+     * 
+     * @param pTaskManager Use this TaskManager to perform any operation from the handler.
      */
     void onFail(TaskManager pTaskManager, Throwable pTaskException);
 }
