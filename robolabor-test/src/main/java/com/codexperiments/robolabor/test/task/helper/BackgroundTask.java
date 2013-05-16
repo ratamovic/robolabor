@@ -20,7 +20,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
     private static final int TASK_STEP_COUNT = 5;
     private static final int TASK_STEP_DURATION_MS = 1000;
     // At least one test must wait until this delay has ended. So please avoid increasing it except for debugging purpose.
-    private static final int TASK_STEP_TIMEOUT_MS = 10000;
+    private static final int TASK_STEP_TIMEOUT_MS = 1000000;
     private static final int TASK_PROGRESS_TIMEOUT_MS = 2000;
 
     private Boolean mCheckEmitterNull;
