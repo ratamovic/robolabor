@@ -31,6 +31,8 @@ import com.codexperiments.robolabor.task.TaskResult;
  * TODO Implement listen().
  * 
  * TODO Execute tasks from UI thread only.
+ * 
+ * TODO Add a configuration option so that termination handlers don't crash the application if a runtime exception occur.
  */
 public class TaskManagerAndroid implements TaskManager
 {
@@ -56,7 +58,14 @@ public class TaskManagerAndroid implements TaskManager
     public void manage(Object pEmitter)
     {
         if (Looper.myLooper() != mUILooper) throw TaskManagerException.mustBeExecutedFromUIThread();
-        manage(pEmitter, null);
+        if (manage(pEmitter, null) != null) {
+            // Try to terminate any task that could be terminated now that a new "potential emitter" is registered.
+            for (TaskContainer<?> lContainer : mContainers) {
+                if (lContainer.finish()) {
+                    notifyFinished(lContainer);
+                }
+            }
+        }
     }
 
     protected Object manage(Object pEmitter, TaskContainer<?> pParentContainer)
@@ -69,12 +78,6 @@ public class TaskManagerAndroid implements TaskManager
             // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
             // collector do its job.
             mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
-            // Try to terminate any task that could be terminated now that a new "potential emitter" is registered.
-            for (TaskContainer<?> lContainer : mContainers) {
-                if (lContainer.finish()) {
-                    notifyFinished(lContainer);
-                }
-            }
         }
         return lEmitterId;
     }
@@ -234,7 +237,8 @@ public class TaskManagerAndroid implements TaskManager
                     if (lEmitter == null) {
                         throw TaskManagerException.invalidTask(mTask, "Could not find outer object reference.");
                     }
-                    dereferenceEmitter();
+                    // Moved to run() because we need to postpone dereferenceEmitter() in case a parent task is still running.
+                    // dereferenceEmitter();
                     mEmitterId = TaskManagerAndroid.this.manage(lEmitter, this);
                 } catch (IllegalArgumentException eIllegalArgumentException) {
                     throw TaskManagerException.internalError();
@@ -338,6 +342,12 @@ public class TaskManagerAndroid implements TaskManager
         public void run()
         {
             try {
+                mUIQueue.post(new Runnable() {
+                    public void run()
+                    {
+                        dereferenceEmitter();
+                    }
+                });
                 mResult = mTask.onProcess(this);
             } catch (final Exception eException) {
                 mThrowable = eException;
@@ -383,11 +393,7 @@ public class TaskManagerAndroid implements TaskManager
 
             try {
                 if (mThrowable == null) {
-                    try {
-                        mTask.onFinish(this, mResult);
-                    } catch (Exception eException) {
-                        mTask.onFail(this, eException);
-                    }
+                    mTask.onFinish(this, mResult);
                 } else {
                     mTask.onFail(this, mThrowable);
                 }

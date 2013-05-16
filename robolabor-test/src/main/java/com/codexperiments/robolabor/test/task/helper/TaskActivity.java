@@ -92,50 +92,62 @@ public class TaskActivity extends FragmentActivity
 
     public BackgroundTask runInnerTask(final Integer pTaskResult)
     {
-        final BackgroundTask lBackgroundTask = new InnerBackgroundTask(pTaskResult, mCheckEmitterNull, mStepByStep);
+        final BackgroundTask lTask = new InnerTask(pTaskResult, mCheckEmitterNull, mStepByStep);
         runOnUiThread(new Runnable() {
             public void run()
             {
-                mTaskManager.execute(lBackgroundTask);
+                mTaskManager.execute(lTask);
             }
         });
-        return lBackgroundTask;
+        return lTask;
+    }
+
+    public HierarchicalTask runHierarchicalTask(final Integer pTaskResult)
+    {
+        final HierarchicalTask lTask = new HierarchicalTask(pTaskResult, mCheckEmitterNull, mStepByStep);
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.execute(lTask);
+            }
+        });
+        return lTask;
     }
 
     public BackgroundTask runInnerTaskWithId(final Integer pTaskId, final Integer pTaskResult)
     {
-        final BackgroundTask lBackgroundTask = new InnerBackgroundTaskWithId(pTaskId, pTaskResult, mCheckEmitterNull, mStepByStep);
+        final BackgroundTask lTask = new InnerTaskWithId(pTaskId, pTaskResult, mCheckEmitterNull, mStepByStep);
         runOnUiThread(new Runnable() {
             public void run()
             {
-                mTaskManager.execute(lBackgroundTask);
+                mTaskManager.execute(lTask);
             }
         });
-        return lBackgroundTask;
+        return lTask;
     }
 
     public BackgroundTask runStaticTask(final Integer pTaskResult)
     {
-        final BackgroundTask lBackgroundTask = new StaticBackgroundTask(pTaskResult, null, mStepByStep);
+        final BackgroundTask lTask = new StaticTask(pTaskResult, null, mStepByStep);
         runOnUiThread(new Runnable() {
             public void run()
             {
-                mTaskManager.execute(lBackgroundTask);
+                mTaskManager.execute(lTask);
             }
         });
-        return lBackgroundTask;
+        return lTask;
     }
 
     public BackgroundTask runStandardTask(final Integer pTaskResult)
     {
-        final BackgroundTask lBackgroundTask = new BackgroundTask(pTaskResult, null, false);
+        final BackgroundTask lTask = new BackgroundTask(pTaskResult, null, false);
         runOnUiThread(new Runnable() {
             public void run()
             {
-                mTaskManager.execute(lBackgroundTask);
+                mTaskManager.execute(lTask);
             }
         });
-        return lBackgroundTask;
+        return lTask;
     }
 
     public void rerunTask(final BackgroundTask pBackgroundTask)
@@ -174,9 +186,9 @@ public class TaskActivity extends FragmentActivity
     }
 
 
-    private class InnerBackgroundTask extends BackgroundTask
+    private class InnerTask extends BackgroundTask
     {
-        public InnerBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
+        public InnerTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
         {
             super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
         }
@@ -207,11 +219,11 @@ public class TaskActivity extends FragmentActivity
     }
 
 
-    private class InnerBackgroundTaskWithId extends InnerBackgroundTask implements TaskIdentity
+    private class InnerTaskWithId extends InnerTask implements TaskIdentity
     {
         private Integer mTaskId;
 
-        public InnerBackgroundTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
+        public InnerTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
         {
             super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
             mTaskId = pTaskId;
@@ -225,9 +237,57 @@ public class TaskActivity extends FragmentActivity
     }
 
 
-    private static class StaticBackgroundTask extends BackgroundTask
+    public class HierarchicalTask extends InnerTask
     {
-        public StaticBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
+        private BackgroundTask mBackgroundTask2;
+        private BackgroundTask mBackgroundTask3;
+
+        public HierarchicalTask(final Integer pTaskResult, final Boolean pCheckOwnerIsNull, final boolean pStepByStep)
+        {
+            super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
+            mBackgroundTask2 = new InnerTask(pTaskResult + 1, pCheckOwnerIsNull, pStepByStep) {
+                {
+                    mBackgroundTask3 = new InnerTask(pTaskResult + 2, pCheckOwnerIsNull, pStepByStep) {
+                        @Override
+                        public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
+                        {
+                            super.onFinish(pTaskManager, (pTaskResult << 16) | mTaskResult);
+                        }
+                    };
+                }
+
+                @Override
+                public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
+                {
+                    pTaskManager.execute(getBackgroundTask3());
+                    Integer toto = TaskActivity.this.mTaskResult;
+                    super.onFinish(pTaskManager, (pTaskResult << 8) | mTaskResult);
+                }
+            };
+        }
+
+        @Override
+        public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
+        {
+            pTaskManager.execute(getBackgroundTask2());
+            super.onFinish(pTaskManager, pTaskResult);
+        }
+
+        public BackgroundTask getBackgroundTask2()
+        {
+            return mBackgroundTask2;
+        }
+
+        public BackgroundTask getBackgroundTask3()
+        {
+            return mBackgroundTask3;
+        }
+    }
+
+
+    private static class StaticTask extends BackgroundTask
+    {
+        public StaticTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
         {
             super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
         }

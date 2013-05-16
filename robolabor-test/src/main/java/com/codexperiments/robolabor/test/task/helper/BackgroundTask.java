@@ -95,7 +95,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
             }
         }
 
-        // Save result.
+        // Save result. TODO This is stupid since result is already initialized... Create a new variable.
         mTaskResult = pTaskResult;
         // Notify listeners that task execution is finished.
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure termination handler is executed only once.
@@ -231,5 +231,12 @@ public class BackgroundTask implements ProgressiveTask<Integer>
     public Object getEmitter()
     {
         return null;
+    }
+
+    @Override
+    public String toString()
+    {
+        return "BackgroundTask [mTaskResult=" + mTaskResult + ", mTaskException=" + mTaskException + ", mStepCounter="
+                        + mStepCounter + ", mProgressCounter=" + mProgressCounter + "]";
     }
 }

@@ -16,6 +16,7 @@ import com.codexperiments.robolabor.task.android.configuration.DefaultConfigurat
 import com.codexperiments.robolabor.test.common.TestCase;
 import com.codexperiments.robolabor.test.task.helper.BackgroundTask;
 import com.codexperiments.robolabor.test.task.helper.TaskActivity;
+import com.codexperiments.robolabor.test.task.helper.TaskActivity.HierarchicalTask;
 import com.codexperiments.robolabor.test.task.helper.TaskEmitter;
 import com.codexperiments.robolabor.test.task.helper.TaskFragment;
 
@@ -129,16 +130,6 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lInitialFragment.getTaskException(), nullValue());
     }
 
-    public void testExecute_inner_managed_persisting_fragmentWithTag() throws InterruptedException
-    {
-        TaskFragment lInitialFragment = getActivity().getFragmentWithTag(); // Look here.
-        BackgroundTask lTask = lInitialFragment.runInnerTask(mTaskResult);
-        assertThat(lTask.awaitFinished(), equalTo(true));
-
-        assertThat(lInitialFragment.getTaskResult(), equalTo(mTaskResult));
-        assertThat(lInitialFragment.getTaskException(), nullValue());
-    }
-
     public void testExecute_inner_managed_recreated_fragmentWithId() throws InterruptedException
     {
         TaskFragment lInitialFragment = getActivity().getFragmentWithId();
@@ -147,19 +138,6 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTask.awaitFinished(), equalTo(true));
 
         TaskFragment lFinalFragment = getActivity().getFragmentWithId();
-        assertThat(lFinalFragment, not(equalTo(lInitialFragment))); // Ensure fragment has been recreated.
-        assertThat(lFinalFragment.getTaskResult(), equalTo(mTaskResult));
-        assertThat(lFinalFragment.getTaskException(), nullValue());
-    }
-
-    public void testExecute_inner_managed_recreated_fragmentWithTag() throws InterruptedException
-    {
-        TaskFragment lInitialFragment = getActivity().getFragmentWithTag(); // Look here.
-        BackgroundTask lTask = lInitialFragment.runInnerTask(mTaskResult);
-        rotateActivitySeveralTimes(4);
-        assertThat(lTask.awaitFinished(), equalTo(true));
-
-        TaskFragment lFinalFragment = getActivity().getFragmentWithTag();
         assertThat(lFinalFragment, not(equalTo(lInitialFragment))); // Ensure fragment has been recreated.
         assertThat(lFinalFragment.getTaskResult(), equalTo(mTaskResult));
         assertThat(lFinalFragment.getTaskException(), nullValue());
@@ -176,6 +154,29 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTask.getTaskException(), nullValue());
     }
 
+    public void testExecute_inner_managed_persisting_fragmentWithTag() throws InterruptedException
+    {
+        TaskFragment lInitialFragment = getActivity().getFragmentWithTag(); // Look here.
+        BackgroundTask lTask = lInitialFragment.runInnerTask(mTaskResult);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+
+        assertThat(lInitialFragment.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lInitialFragment.getTaskException(), nullValue());
+    }
+
+    public void testExecute_inner_managed_recreated_fragmentWithTag() throws InterruptedException
+    {
+        TaskFragment lInitialFragment = getActivity().getFragmentWithTag(); // Look here.
+        BackgroundTask lTask = lInitialFragment.runInnerTask(mTaskResult);
+        rotateActivitySeveralTimes(4);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+
+        TaskFragment lFinalFragment = getActivity().getFragmentWithTag();
+        assertThat(lFinalFragment, not(equalTo(lInitialFragment))); // Ensure fragment has been recreated.
+        assertThat(lFinalFragment.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lFinalFragment.getTaskException(), nullValue());
+    }
+
     public void testExecute_inner_managed_destroyed_fragmentWithTag() throws InterruptedException
     {
         TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
@@ -185,6 +186,37 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
         assertThat(lTask.getTaskResult(), equalTo(mTaskResult));
         assertThat(lTask.getTaskException(), nullValue());
+    }
+
+    public void testExecute_inner_hierarchical_persisting() throws InterruptedException
+    {
+        TaskActivity lInitialActivity = getActivity();
+        HierarchicalTask lTask = lInitialActivity.runHierarchicalTask(mTaskResult);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+        assertThat(lTask.getBackgroundTask2().awaitFinished(), equalTo(true));
+        assertThat(lTask.getBackgroundTask3().awaitFinished(), equalTo(true));
+
+        assertThat((lInitialActivity.getTaskResult() & 0x000000ff) >> 0, equalTo(mTaskResult));
+        assertThat((lInitialActivity.getTaskResult() & 0x0000ff00) >> 8, equalTo(mTaskResult + 1));
+        assertThat((lInitialActivity.getTaskResult() & 0x00ff0000) >> 16, equalTo(mTaskResult + 2));
+        assertThat(lInitialActivity.getTaskException(), nullValue());
+    }
+
+    public void testExecute_inner_hierarchical_recreated() throws InterruptedException
+    {
+        TaskActivity lInitialActivity = getActivity();
+        HierarchicalTask lTask = lInitialActivity.runHierarchicalTask(mTaskResult);
+        rotateActivitySeveralTimes(4);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+        rotateActivitySeveralTimes(4);
+        assertThat(lTask.getBackgroundTask2().awaitFinished(), equalTo(true));
+        rotateActivitySeveralTimes(4);
+        assertThat(lTask.getBackgroundTask3().awaitFinished(), equalTo(true));
+
+        assertThat((lInitialActivity.getTaskResult() & 0x000000ff) >> 0, equalTo(mTaskResult));
+        assertThat((lInitialActivity.getTaskResult() & 0x0000ff00) >> 8, equalTo(mTaskResult + 1));
+        assertThat((lInitialActivity.getTaskResult() & 0x00ff0000) >> 16, equalTo(mTaskResult + 2));
+        assertThat(lInitialActivity.getTaskException(), nullValue());
     }
 
     public void testExecute_static_managed_persisting() throws InterruptedException
