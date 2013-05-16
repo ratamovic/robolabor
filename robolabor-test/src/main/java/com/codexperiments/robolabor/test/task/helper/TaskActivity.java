@@ -260,7 +260,6 @@ public class TaskActivity extends FragmentActivity
                 public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
                 {
                     pTaskManager.execute(getBackgroundTask3());
-                    Integer toto = TaskActivity.this.mTaskResult;
                     super.onFinish(pTaskManager, (pTaskResult << 8) | mTaskResult);
                 }
             };
