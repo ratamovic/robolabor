@@ -213,10 +213,12 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         rotateActivitySeveralTimes(4);
         assertThat(lTask.getBackgroundTask3().awaitFinished(), equalTo(true));
 
-        assertThat((lInitialActivity.getTaskResult() & 0x000000ff) >> 0, equalTo(mTaskResult));
-        assertThat((lInitialActivity.getTaskResult() & 0x0000ff00) >> 8, equalTo(mTaskResult + 1));
-        assertThat((lInitialActivity.getTaskResult() & 0x00ff0000) >> 16, equalTo(mTaskResult + 2));
-        assertThat(lInitialActivity.getTaskException(), nullValue());
+        TaskActivity lFinalActivity = getActivity();
+        assertThat(lInitialActivity.getTaskResult(), nullValue()); // TODO Do the same for other recreation tests.
+        assertThat((lFinalActivity.getTaskResult() & 0x000000ff) >> 0, equalTo(mTaskResult));
+        assertThat((lFinalActivity.getTaskResult() & 0x0000ff00) >> 8, equalTo(mTaskResult + 1));
+        assertThat((lFinalActivity.getTaskResult() & 0x00ff0000) >> 16, equalTo(mTaskResult + 2));
+        assertThat(lFinalActivity.getTaskException(), nullValue());
     }
 
     public void testExecute_static_managed_persisting() throws InterruptedException

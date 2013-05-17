@@ -5,6 +5,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -175,11 +177,6 @@ public class TaskManagerAndroid implements TaskManager
     /**
      * TODO Explain why we implement TaskManager.
      * 
-     * TODO We have a problem here: technically speaking, an object can contain several outer references (i.e. several this$x),
-     * with at most one reference per inheritance level. This case is rare but possible and not handled here. To handle it
-     * properly, we should look for an emitter field on Task super classes too and keep a list of emitter fields instead of a
-     * single one. The same goes for emitter ids of course.
-     * 
      * @param <TResult> Expected task result.
      */
     private class TaskContainer<TResult> implements Runnable, TaskManager
@@ -199,8 +196,7 @@ public class TaskManagerAndroid implements TaskManager
         private boolean mFinished;
 
         // Cached values.
-        private Field mEmitterField;
-        private Object mEmitterId;
+        private List<TaskEmitter> mEmitters;
         private Runnable mProgressRunnable;
 
         public TaskContainer(Task<TResult> pTask,
@@ -212,7 +208,8 @@ public class TaskManagerAndroid implements TaskManager
             mTask = pTask;
             mTaskId = (pTask instanceof TaskIdentity) ? ((TaskIdentity) pTask).getId() : null;
             mTaskConfig = pTaskConfig;
-            mIsInner = (pTask.getClass().getEnclosingClass() != null && !Modifier.isStatic(pTask.getClass().getModifiers()));
+            // TODO Should check recursively on parent classes I guess.
+            mIsInner = ((pTask.getClass().getEnclosingClass() != null) && !Modifier.isStatic(pTask.getClass().getModifiers()));
             mParentContainer = pParentContainer;
             mUIQueue = pUIQueue;
 
@@ -221,59 +218,44 @@ public class TaskManagerAndroid implements TaskManager
             mProcessed = false;
             mFinished = false;
 
-            mEmitterField = null;
-            mEmitterId = null;
+            mEmitters = new LinkedList<TaskEmitter>();
             mProgressRunnable = null;
         }
 
+        /**
+         * TODO Comment Locate all the outer object references (e.g. this$0) inside the task class. Check is performed recursively
+         * on all super classes too.
+         */
         public void prepareToRun()
         {
             if (mIsInner) {
                 try {
-                    mEmitterField = resolveEmitterField();
-
-                    // Find the outer object owning the task and dereference it. Turn it into a managed object.
-                    Object lEmitter = mEmitterField.get(mTask);
-                    if (lEmitter == null) {
-                        throw TaskManagerException.invalidTask(mTask, "Could not find outer object reference.");
+                    // Go through the main class and each of its super classes and look for "this$" fields.
+                    Class<?> lTaskClass = mTask.getClass();
+                    while (lTaskClass != null) {
+                        Field[] lClassFields = lTaskClass.getDeclaredFields();
+                        for (Field lField : lClassFields) {
+                            String lFieldName = lField.getName();
+                            if (lFieldName.startsWith("this$")) {
+                                // Moved to run() as we need to postpone dereferenceEmitter() in case a parent task is running.
+                                // dereferenceEmitter();
+                                // Retrieve the emitter by extracting it "reflectively" from the task field and compute its Id.
+                                lField.setAccessible(true);
+                                Object lEmitter = lField.get(mTask);
+                                if (lEmitter == null) throw TaskManagerException.invalidTask(mTask, "Outer object is null.");
+                                Object lEmitterId = TaskManagerAndroid.this.manage(lEmitter, this);
+                                mEmitters.add(new TaskEmitter(lField, lEmitterId));
+                            }
+                        }
+                        lTaskClass = lTaskClass.getSuperclass();
                     }
-                    // Moved to run() because we need to postpone dereferenceEmitter() in case a parent task is still running.
-                    // dereferenceEmitter();
-                    mEmitterId = TaskManagerAndroid.this.manage(lEmitter, this);
                 } catch (IllegalArgumentException eIllegalArgumentException) {
-                    throw TaskManagerException.internalError();
+                    throw TaskManagerException.internalError(eIllegalArgumentException);
                 } catch (IllegalAccessException eIllegalAccessException) {
-                    throw TaskManagerException.internalError();
+                    throw TaskManagerException.internalError(eIllegalAccessException);
                 }
 
             }
-        }
-
-        /**
-         * Locate the outer object reference Field (e.g. this$0) inside the task class. Check is performed recursively on super
-         * classes until reference is found.
-         * 
-         * @param pTask Object on which the field must be located.
-         * @return Field pointing to the outer objec
-         * @throws TaskManagerException If pTask is not an inner-class or does not have an outer object reference (which should be
-         *             impossible for an inner class).
-         */
-        private Field resolveEmitterField()
-        {
-            Class<?> lTaskClass = mTask.getClass();
-            while (lTaskClass != null) {
-                Field[] lFields = mTask.getClass().getDeclaredFields();
-                for (Field lField : lFields) {
-                    String lFieldName = lField.getName();
-                    if (lFieldName.startsWith("this$")) {
-                        lField.setAccessible(true);
-                        return lField;
-                    }
-                }
-
-                lTaskClass = lTaskClass.getSuperclass();
-            }
-            throw TaskManagerException.invalidTask(mTask, "Could not find outer class field.");
         }
 
         /**
@@ -291,12 +273,14 @@ public class TaskManagerAndroid implements TaskManager
                 if (mParentContainer != null) mParentContainer.dereferenceEmitter();
                 // Dereference emitter.
                 if (mIsInner) {
-                    mEmitterField.set(mTask, null);
+                    for (TaskEmitter lEmitter : mEmitters) {
+                        lEmitter.mEmitterField.set(mTask, null);
+                    }
                 }
             } catch (IllegalArgumentException eIllegalArgumentException) {
-                throw TaskManagerException.internalError();
+                throw TaskManagerException.internalError(eIllegalArgumentException);
             } catch (IllegalAccessException eIllegalAccessException) {
-                throw TaskManagerException.internalError();
+                throw TaskManagerException.internalError(eIllegalAccessException);
             }
         }
 
@@ -315,24 +299,30 @@ public class TaskManagerAndroid implements TaskManager
                     // It is important to validate reference can be restored before trying to restore it in the parent container.
                     // Indeed, if the reference cannot be restored at one level in the hierarchy, then no emitter is restored at
                     // any level and thus, no "rollback" is necessary.
-                    WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolve(mEmitterId);
-                    if (lEmitterRef == null) return false;
-                    Object lEmitter = lEmitterRef.get();
-                    if (lEmitter == null) return false;
+                    Object[] lEmitters = new Object[mEmitters.size()];
+                    for (int i = 0; i < lEmitters.length; ++i) {
+                        TaskEmitter lEmitter = mEmitters.get(i);
+                        WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolve(lEmitter.mEmitterId);
+                        if (lEmitterRef == null) return false;
+                        lEmitters[i] = lEmitterRef.get();
+                        if (lEmitters[i] == null) return false;
+                    }
 
                     // Check if parent containers can and have been restored.
                     if ((mParentContainer != null) && !mParentContainer.referenceEmitter()) return false;
 
                     // Finally restore the emitter reference.
-                    mEmitterField.set(mTask, lEmitter);
+                    for (int i = 0; i < lEmitters.length; ++i) {
+                        mEmitters.get(i).mEmitterField.set(mTask, lEmitters[i]);
+                    }
                     return true;
                 } else {
                     return (mParentContainer != null) ? mParentContainer.referenceEmitter() : true;
                 }
             } catch (IllegalArgumentException eIllegalArgumentException) {
-                throw TaskManagerException.internalError();
+                throw TaskManagerException.internalError(eIllegalArgumentException);
             } catch (IllegalAccessException eIllegalAccessException) {
-                throw TaskManagerException.internalError();
+                throw TaskManagerException.internalError(eIllegalAccessException);
             }
         }
 
@@ -496,6 +486,19 @@ public class TaskManagerAndroid implements TaskManager
             } else {
                 throw TaskManagerException.internalError();
             }
+        }
+    }
+
+
+    private static class TaskEmitter
+    {
+        private Field mEmitterField;
+        private Object mEmitterId;
+
+        public TaskEmitter(Field pEmitterField, Object pEmitterId)
+        {
+            mEmitterField = pEmitterField;
+            mEmitterId = pEmitterId;
         }
     }
 

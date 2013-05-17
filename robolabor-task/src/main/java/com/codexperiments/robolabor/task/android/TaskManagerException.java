@@ -15,9 +15,19 @@ public class TaskManagerException extends RuntimeException
         super(String.format(pMessage, pArguments));
     }
 
+    protected TaskManagerException(Throwable pThrowable, String pMessage, Object... pArguments)
+    {
+        super(String.format(pMessage, pArguments), pThrowable);
+    }
+
     public static TaskManagerException internalError()
     {
         return new TaskManagerException("Internal error inside the TaskManager");
+    }
+
+    public static TaskManagerException internalError(Throwable pThrowable)
+    {
+        return new TaskManagerException(pThrowable, "Internal error inside the TaskManager");
     }
 
     public static TaskManagerException invalidTask()
