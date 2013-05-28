@@ -3,9 +3,9 @@ package com.codexperiments.robolabor.task.android;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -34,7 +34,11 @@ import com.codexperiments.robolabor.task.TaskResult;
  * 
  * TODO Execute tasks from UI thread only.
  * 
- * TODO Add a configuration option so that termination handlers don't crash the application if a runtime exception occur.
+ * TODO Configuration option so that termination handlers don't crash the application if a runtime exception occur.
+ * 
+ * TODO Configuration option to forbid use of unmanaged objects.
+ * 
+ * TODO Configuration option to make a tsk reusable.
  */
 public class TaskManagerAndroid implements TaskManager
 {
@@ -77,9 +81,34 @@ public class TaskManagerAndroid implements TaskManager
         // Note that an emitter Id can be null if no emitter dereferencement should be applied.
         Object lEmitterId = mManagerConfig.resolveEmitterId(pEmitter);
         if (lEmitterId != null) {
-            // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
-            // collector do its job.
-            mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
+            // If user has requested explicitly to manage the emitter, then just obey!
+            if (pParentContainer == null) {
+                // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
+                // collector do its job.
+                mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
+            }
+            // If the present method is invoked internally from prepareToRun(),
+            else {
+                // TODO emitter id must not be a the emitter itself. Should find a way to forbid it.
+                // If emitter is managed by the user explicitly, do nothing. User can update reference through manage(Object).
+                if (mEmittersById.get(lEmitterId) == null) {
+                    mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
+                }
+            }
+            // 1st condition: If user has requested explicitly to manage the emitter (by calling managed(Object)), then just obey!
+            // 2nd condition: If the present method is invoked internally from prepareToRun() (i.e. pParentContainer != null) and:
+            // If emitter is managed by the user explicitly (i.e. emitter is already present in the emitter list), do nothing.
+            // User can update reference himself through manage(Object).
+            // If emitter is not managed by the user explicitly but is already present in the emitter list because another task
+            // has been executed, do nothing. Indeed unmanaged emitter are unique and never need to be updated.
+            // If emitter is not managed by the user explicitly but is not present in the emitter list, then start managing it so
+            // that we will be able to restore its reference later.
+            // TODO emitter id must not be a the emitter itself. Should find a way to forbid it.
+            if ((pParentContainer == null) || (mEmittersById.get(lEmitterId) == null)) {
+                // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
+                // collector do its job.
+                mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
+            }
         }
         return lEmitterId;
     }
@@ -208,8 +237,7 @@ public class TaskManagerAndroid implements TaskManager
             mTask = pTask;
             mTaskId = (pTask instanceof TaskIdentity) ? ((TaskIdentity) pTask).getId() : null;
             mTaskConfig = pTaskConfig;
-            // TODO Should check recursively on parent classes I guess.
-            mIsInner = ((pTask.getClass().getEnclosingClass() != null) && !Modifier.isStatic(pTask.getClass().getModifiers()));
+            mIsInner = false;
             mParentContainer = pParentContainer;
             mUIQueue = pUIQueue;
 
@@ -218,7 +246,7 @@ public class TaskManagerAndroid implements TaskManager
             mProcessed = false;
             mFinished = false;
 
-            mEmitters = new LinkedList<TaskEmitter>();
+            mEmitters = new ArrayList<TaskEmitter>(1); // Most of the time, a task will have only one emitter.
             mProgressRunnable = null;
         }
 
@@ -228,38 +256,70 @@ public class TaskManagerAndroid implements TaskManager
          */
         public void prepareToRun()
         {
-            if (mIsInner) {
-                try {
-                    // Go through the main class and each of its super classes and look for "this$" fields.
-                    Class<?> lTaskClass = mTask.getClass();
-                    while (lTaskClass != null) {
-                        Field[] lClassFields = lTaskClass.getDeclaredFields();
-                        for (Field lField : lClassFields) {
-                            String lFieldName = lField.getName();
-                            if (lFieldName.startsWith("this$")) {
-                                // Moved to run() as we need to postpone dereferenceEmitter() in case a parent task is running.
-                                // dereferenceEmitter();
-                                // Retrieve the emitter by extracting it "reflectively" from the task field and compute its Id.
-                                lField.setAccessible(true);
-                                Object lEmitter = lField.get(mTask);
-                                if (lEmitter == null) throw TaskManagerException.invalidTask(mTask, "Outer object is null.");
-                                Object lEmitterId = TaskManagerAndroid.this.manage(lEmitter, this);
-                                mEmitters.add(new TaskEmitter(lField, lEmitterId));
-                            }
-                        }
-                        lTaskClass = lTaskClass.getSuperclass();
-                    }
-                } catch (IllegalArgumentException eIllegalArgumentException) {
-                    throw TaskManagerException.internalError(eIllegalArgumentException);
-                } catch (IllegalAccessException eIllegalAccessException) {
-                    throw TaskManagerException.internalError(eIllegalAccessException);
-                }
+            // Go through the main class and each of its super classes and look for "this$" fields.
+            Class<?> lTaskClass = mTask.getClass();
+            while (lTaskClass != Object.class) {
+                // If current class is an inner class...
+                if ((lTaskClass.getEnclosingClass() != null) && !Modifier.isStatic(lTaskClass.getModifiers())) {
+                    mIsInner = true;
 
+                    // Find emitter references and manage them.
+                    for (Field lField : lTaskClass.getDeclaredFields()) {
+                        if (lField.getName().startsWith("this$")) {
+                            prepare(lField);
+                        }
+                    }
+                }
+                lTaskClass = lTaskClass.getSuperclass();
             }
         }
 
         /**
-         * Dereference the emitter (which is an outer class) from the task (which is an inner class) and return its Id. Emitter
+         * Manage the emitter referenced from the given field, i.e. save a weak reference pointing to it and keep its Id from
+         * within the container.
+         * 
+         * @param pField Field to manage.
+         */
+        private void prepare(Field pField)
+        {
+            try {
+                pField.setAccessible(true);
+
+                // Retrieve the emitter by extracting it "reflectively" from the task field and compute its Id.
+                Object lEmitterId = null;
+                Object lEmitter = pField.get(mTask);
+                if (lEmitter != null) {
+                    lEmitterId = TaskManagerAndroid.this.manage(lEmitter, this);
+                }
+                // If reference is null, that means the emitter is probably used in a parent container and
+                // already managed. Try to find its Id in parent containers.
+                else {
+                    TaskContainer<?> lParentContainer = mParentContainer;
+                    while ((lEmitterId == null) && (lParentContainer != null)) {
+                        for (TaskEmitter lParentEmitter : lParentContainer.mEmitters) {
+                            if (pField.getClass() == lParentEmitter.mEmitterField.getClass()) {
+                                lEmitterId = lParentEmitter.mEmitterId;
+                                break;
+                            }
+                        }
+                        lParentContainer = lParentContainer.mParentContainer;
+                    }
+                }
+
+                if (lEmitterId != null) {
+                    mEmitters.add(new TaskEmitter(pField, lEmitterId));
+                } else {
+                    throw TaskManagerException.invalidTask(mTask, "Emitter is null (recycled task?).");
+                }
+            } catch (IllegalArgumentException eIllegalArgumentException) {
+                throw TaskManagerException.internalError(eIllegalArgumentException);
+            } catch (IllegalAccessException eIllegalAccessException) {
+                throw TaskManagerException.internalError(eIllegalAccessException);
+            }
+        }
+
+        /**
+         * Dereference the emitter (which is an outer object) from the task (which is an inner class) and return its Id. Emitter
          * references are stored internally so that they can be restored later when the task has finished its computation. Note
          * that an emitter Id can be null if a task is not an inner class or if no dereferencement should be applied.
          * 
@@ -294,31 +354,22 @@ public class TaskManagerAndroid implements TaskManager
         private boolean referenceEmitter()
         {
             try {
+                // Try to restore emitters in parent containers.
+                boolean lRestored = (mParentContainer == null) || mParentContainer.referenceEmitter();
+
+                // Restore references for current container.
                 if (mIsInner) {
-                    // Check if we need and have a reference to the emitter.
-                    // It is important to validate reference can be restored before trying to restore it in the parent container.
-                    // Indeed, if the reference cannot be restored at one level in the hierarchy, then no emitter is restored at
-                    // any level and thus, no "rollback" is necessary.
-                    Object[] lEmitters = new Object[mEmitters.size()];
-                    for (int i = 0; i < lEmitters.length; ++i) {
-                        TaskEmitter lEmitter = mEmitters.get(i);
-                        WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolve(lEmitter.mEmitterId);
-                        if (lEmitterRef == null) return false;
-                        lEmitters[i] = lEmitterRef.get();
-                        if (lEmitters[i] == null) return false;
+                    for (TaskEmitter lEmitterDescriptor : mEmitters) {
+                        WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolve(lEmitterDescriptor.mEmitterId);
+                        Object lEmitter = null;
+                        if (lEmitterRef != null) {
+                            lEmitter = lEmitterRef.get();
+                            lEmitterDescriptor.mEmitterField.set(mTask, lEmitter);
+                        }
+                        lRestored &= (lEmitter != null);
                     }
-
-                    // Check if parent containers can and have been restored.
-                    if ((mParentContainer != null) && !mParentContainer.referenceEmitter()) return false;
-
-                    // Finally restore the emitter reference.
-                    for (int i = 0; i < lEmitters.length; ++i) {
-                        mEmitters.get(i).mEmitterField.set(mTask, lEmitters[i]);
-                    }
-                    return true;
-                } else {
-                    return (mParentContainer != null) ? mParentContainer.referenceEmitter() : true;
                 }
+                return lRestored;
             } catch (IllegalArgumentException eIllegalArgumentException) {
                 throw TaskManagerException.internalError(eIllegalArgumentException);
             } catch (IllegalAccessException eIllegalAccessException) {
@@ -332,6 +383,7 @@ public class TaskManagerAndroid implements TaskManager
         public void run()
         {
             try {
+                // TODO We should find a way not to postpone the following operation.
                 mUIQueue.post(new Runnable() {
                     public void run()
                     {
@@ -394,6 +446,9 @@ public class TaskManagerAndroid implements TaskManager
                 Log.e(TaskManagerAndroid.class.getSimpleName(), "An error occured inside task handler", eRuntimeException);
                 throw eRuntimeException;
             } finally {
+                // After task is over, it may still get dereferenced (e.g. if a child task gets executed). So dereference it
+                // immediately to make the detection of potential NullPointerException (e.g. because of an inner class) easier.
+                dereferenceEmitter();
                 mFinished = true;
             }
             return true;
@@ -490,6 +545,7 @@ public class TaskManagerAndroid implements TaskManager
     }
 
 
+    // TODO TaskEmitter should be renamed to something like TaskEmitterDescriptor
     private static class TaskEmitter
     {
         private Field mEmitterField;

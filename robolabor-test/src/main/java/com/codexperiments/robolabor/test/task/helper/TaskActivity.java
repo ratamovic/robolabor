@@ -188,9 +188,9 @@ public class TaskActivity extends FragmentActivity
 
     private class InnerTask extends BackgroundTask
     {
-        public InnerTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
+        public InnerTask(Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
         {
-            super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
+            super(pTaskResult, pCheckEmitterNull, pStepByStep);
         }
 
         @Override
@@ -223,9 +223,9 @@ public class TaskActivity extends FragmentActivity
     {
         private Integer mTaskId;
 
-        public InnerTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
+        public InnerTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
         {
-            super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
+            super(pTaskResult, pCheckEmitterNull, pStepByStep);
             mTaskId = pTaskId;
         }
 
@@ -239,27 +239,66 @@ public class TaskActivity extends FragmentActivity
 
     public class HierarchicalTask extends InnerTask
     {
-        private BackgroundTask mBackgroundTask2;
-        private BackgroundTask mBackgroundTask3;
+        private BackgroundTask mInnerTask;
 
-        public HierarchicalTask(final Integer pTaskResult, final Boolean pCheckOwnerIsNull, final boolean pStepByStep)
+        public HierarchicalTask(final Integer pTaskResult, final Boolean pCheckEmitterNull, final boolean pStepByStep)
         {
-            super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
-            mBackgroundTask2 = new InnerTask(pTaskResult + 1, pCheckOwnerIsNull, pStepByStep) {
-                {
-                    mBackgroundTask3 = new InnerTask(pTaskResult + 2, pCheckOwnerIsNull, pStepByStep) {
-                        @Override
-                        public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
-                        {
-                            super.onFinish(pTaskManager, (pTaskResult << 16) | mTaskResult);
-                        }
-                    };
-                }
+            super(pTaskResult, pCheckEmitterNull, pStepByStep);
+        }
 
+        @Override
+        public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
+        {
+            mInnerTask = new InnerTask(pTaskResult + 1, getCheckEmitterNull(), getStepByStep()) {
                 @Override
                 public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
                 {
-                    pTaskManager.execute(getBackgroundTask3());
+                    super.onFinish(pTaskManager, (TaskActivity.this != null) ? ((pTaskResult << 8) | mTaskResult) : pTaskResult);
+                }
+            };
+            pTaskManager.execute(mInnerTask);
+            super.onFinish(pTaskManager, pTaskResult);
+        }
+
+        public BackgroundTask getInnerTask()
+        {
+            return mInnerTask;
+        }
+    }
+
+
+    private static class StaticTask extends BackgroundTask
+    {
+        public StaticTask(Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
+        {
+            super(pTaskResult, pCheckEmitterNull, pStepByStep);
+        }
+    }
+
+    public BugHierarchicalTask bugRunHierarchicalTask(final Integer pTaskResult)
+    {
+        final BugHierarchicalTask lTask = new BugHierarchicalTask(pTaskResult, mCheckEmitterNull, mStepByStep);
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.execute(lTask);
+            }
+        });
+        return lTask;
+    }
+
+
+    public class BugHierarchicalTask extends InnerTask
+    {
+        private BackgroundTask mBackgroundTask2;
+
+        public BugHierarchicalTask(final Integer pTaskResult, final Boolean pCheckEmitterNull, final boolean pStepByStep)
+        {
+            super(pTaskResult, pCheckEmitterNull, pStepByStep);
+            mBackgroundTask2 = new InnerTask(pTaskResult + 1, pCheckEmitterNull, pStepByStep) {
+                @Override
+                public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
+                {
                     super.onFinish(pTaskManager, (pTaskResult << 8) | mTaskResult);
                 }
             };
@@ -275,20 +314,6 @@ public class TaskActivity extends FragmentActivity
         public BackgroundTask getBackgroundTask2()
         {
             return mBackgroundTask2;
-        }
-
-        public BackgroundTask getBackgroundTask3()
-        {
-            return mBackgroundTask3;
-        }
-    }
-
-
-    private static class StaticTask extends BackgroundTask
-    {
-        public StaticTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
-        {
-            super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
         }
     }
 }

@@ -4,6 +4,9 @@ import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.junit.Assert.assertThat;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import android.test.UiThreadTest;
 
 import com.codexperiments.robolabor.task.Task;
@@ -16,6 +19,7 @@ import com.codexperiments.robolabor.task.android.configuration.DefaultConfigurat
 import com.codexperiments.robolabor.test.common.TestCase;
 import com.codexperiments.robolabor.test.task.helper.BackgroundTask;
 import com.codexperiments.robolabor.test.task.helper.TaskActivity;
+import com.codexperiments.robolabor.test.task.helper.TaskActivity.BugHierarchicalTask;
 import com.codexperiments.robolabor.test.task.helper.TaskActivity.HierarchicalTask;
 import com.codexperiments.robolabor.test.task.helper.TaskEmitter;
 import com.codexperiments.robolabor.test.task.helper.TaskFragment;
@@ -193,12 +197,10 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         TaskActivity lInitialActivity = getActivity();
         HierarchicalTask lTask = lInitialActivity.runHierarchicalTask(mTaskResult);
         assertThat(lTask.awaitFinished(), equalTo(true));
-        assertThat(lTask.getBackgroundTask2().awaitFinished(), equalTo(true));
-        assertThat(lTask.getBackgroundTask3().awaitFinished(), equalTo(true));
+        assertThat(lTask.getInnerTask().awaitFinished(), equalTo(true));
 
         assertThat((lInitialActivity.getTaskResult() & 0x000000ff) >> 0, equalTo(mTaskResult));
         assertThat((lInitialActivity.getTaskResult() & 0x0000ff00) >> 8, equalTo(mTaskResult + 1));
-        assertThat((lInitialActivity.getTaskResult() & 0x00ff0000) >> 16, equalTo(mTaskResult + 2));
         assertThat(lInitialActivity.getTaskException(), nullValue());
     }
 
@@ -209,16 +211,26 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         rotateActivitySeveralTimes(4);
         assertThat(lTask.awaitFinished(), equalTo(true));
         rotateActivitySeveralTimes(4);
-        assertThat(lTask.getBackgroundTask2().awaitFinished(), equalTo(true));
-        rotateActivitySeveralTimes(4);
-        assertThat(lTask.getBackgroundTask3().awaitFinished(), equalTo(true));
+        assertThat(lTask.getInnerTask().awaitFinished(), equalTo(true));
 
         TaskActivity lFinalActivity = getActivity();
         assertThat(lInitialActivity.getTaskResult(), nullValue()); // TODO Do the same for other recreation tests.
         assertThat((lFinalActivity.getTaskResult() & 0x000000ff) >> 0, equalTo(mTaskResult));
         assertThat((lFinalActivity.getTaskResult() & 0x0000ff00) >> 8, equalTo(mTaskResult + 1));
-        assertThat((lFinalActivity.getTaskResult() & 0x00ff0000) >> 16, equalTo(mTaskResult + 2));
         assertThat(lFinalActivity.getTaskException(), nullValue());
+    }
+
+    public void testExecute_inner_hierarchical_destroyed() throws InterruptedException
+    {
+        TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
+        HierarchicalTask lTask = lInitialActivity.runHierarchicalTask(mTaskResult);
+        lInitialActivity = terminateActivity(lInitialActivity);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+        assertThat(lTask.getInnerTask().awaitFinished(), equalTo(true));
+
+        assertThat(lTask.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lTask.getInnerTask().getTaskResult(), equalTo(mTaskResult + 1));
+        assertThat(lTask.getTaskException(), nullValue());
     }
 
     public void testExecute_static_managed_persisting() throws InterruptedException
@@ -297,30 +309,6 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTask.getTaskException(), nullValue());
     }
 
-    public void testExecute_severalTasks_serial_withNoId() throws InterruptedException
-    {
-        TaskActivity lInitialActivity = getActivity();
-        BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
-        // Execute a new task. Since tasks are executed serially, this one will overwrite previous one result.
-        BackgroundTask lNewTask = lInitialActivity.runInnerTask(nextResult()); // Expect a new result.
-        // Execute previous task again. Since previous task has not been fully executed, this one will not be enqueued.
-        // If it was, an exception would be raised because the CountDownLatch must be equal to 1 in BackgroundTask.
-        // In addition, the task has been dereferenced at this point. So TaskManager would raise an exception anyway.
-        lInitialActivity.rerunTask(lNewTask);
-        assertThat(lTask.awaitFinished(), equalTo(true));
-        assertThat(lNewTask.awaitFinished(), equalTo(true)); // Ensure second task is executed too.
-
-        assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult)); // Result should be the one of the second task.
-        assertThat(lInitialActivity.getTaskException(), nullValue());
-
-        // Execute previous task again. Since previous execution is fully finished, this one will be enqueued.
-        lNewTask.reset(nextResult());
-        lInitialActivity.rerunTask(lNewTask); // Expect a new result.
-        assertThat(lNewTask.awaitFinished(), equalTo(true));
-        assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult)); // Result should be the one of the last execution.
-        assertThat(lInitialActivity.getTaskException(), nullValue());
-    }
-
     public void testExecute_severalTasks_serial_withDifferentIds() throws InterruptedException
     {
         TaskActivity lInitialActivity = getActivity();
@@ -377,6 +365,32 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
         assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult)); // Result should be the one of the second task.
         assertThat(lInitialActivity.getTaskException(), nullValue());
+    }
+
+    public void testExecute_reuseTask() throws Throwable
+    {
+        TaskActivity lInitialActivity = getActivity();
+        final BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+        assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lInitialActivity.getTaskException(), nullValue());
+
+        // Execute previous task again, which is not allowed by TaskManager, hence the exception that is raised.
+        lTask.reset(nextResult());
+        final AtomicBoolean lFailure = new AtomicBoolean(false);
+        runTestOnUiThread(new Runnable() {
+            public void run()
+            {
+                try {
+                    mTaskManager.execute(lTask);
+                    fail();
+                } catch (TaskManagerException eTaskManagerException) {
+                    lFailure.set(true);
+                }
+            }
+        });
+        assertThat(lTask.awaitFinished(), equalTo(false));
+        assertThat(lFailure.get(), equalTo(true));
     }
 
     public void testExecute_progress_persisting() throws InterruptedException
@@ -538,5 +552,22 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         } catch (TaskManagerException eTaskManagerException) {
             // Success
         }
+    }
+
+    /**
+     * Bug that causes hierarchical tasks to corrupt emitter list. Shouldn't occur anymore.
+     */
+    public void testExecute_inner_hierarchical() throws InterruptedException
+    {
+        TaskActivity lInitialActivity = getActivity();
+        BugHierarchicalTask lTask = lInitialActivity.bugRunHierarchicalTask(mTaskResult);
+        rotateActivitySeveralTimes(4);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+        assertThat(lTask.getBackgroundTask2().awaitFinished(), equalTo(true));
+
+        TaskActivity lFinalActivity = getActivity();
+        assertThat((lFinalActivity.getTaskResult() & 0x000000ff) >> 0, equalTo(mTaskResult));
+        assertThat((lFinalActivity.getTaskResult() & 0x0000ff00) >> 8, equalTo(mTaskResult + 1));
+        assertThat(lFinalActivity.getTaskException(), nullValue());
     }
 }
