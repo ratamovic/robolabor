@@ -38,7 +38,7 @@ import com.codexperiments.robolabor.task.TaskResult;
  * 
  * TODO Configuration option to forbid use of unmanaged objects.
  * 
- * TODO Configuration option to make a tsk reusable.
+ * TODO Configuration option to make a task reusable.
  */
 public class TaskManagerAndroid implements TaskManager
 {
