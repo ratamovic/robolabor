@@ -476,6 +476,30 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTask.getProgressCounter(), equalTo(1));
     }
 
+    // public void testListen_inner_managed_persisting_activity() throws InterruptedException
+    // {
+    // TaskActivity lInitialActivity = getActivity();
+    // BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
+    // lInitialActivity.listenInnerTask(new TaskResult<Integer>() {
+    // public void getKind(Task<?> pTask, Class<?> pResult)
+    // {
+    //
+    // }
+    //
+    // public void onFail(TaskManager pArg0, Throwable pArg1)
+    // {
+    // }
+    //
+    // public void onFinish(TaskManager pArg0, Integer pArg1)
+    // {
+    // }
+    // });
+    // assertThat(lTask.awaitFinished(), equalTo(true));
+    //
+    // assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult));
+    // assertThat(lInitialActivity.getTaskException(), nullValue());
+    // }
+
     @UiThreadTest
     public void testExecute_failure_taskNull() throws InterruptedException
     {

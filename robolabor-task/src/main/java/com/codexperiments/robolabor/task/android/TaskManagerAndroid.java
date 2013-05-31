@@ -39,11 +39,13 @@ import com.codexperiments.robolabor.task.TaskResult;
  * TODO Configuration option to forbid use of unmanaged objects.
  * 
  * TODO Configuration option to make a task reusable.
+ * 
+ * TODO onRestore
  */
 public class TaskManagerAndroid implements TaskManager
 {
     private ManagerConfiguration mManagerConfig;
-    private Set<TaskContainer<?>> mContainers;
+    private Set<TaskContainer> mContainers;
     private Map<Object, WeakReference<?>> mEmittersById;
 
     private Handler mUIQueue;
@@ -53,7 +55,7 @@ public class TaskManagerAndroid implements TaskManager
     {
         super();
         mManagerConfig = pConfig;
-        mContainers = new HashSet<TaskContainer<?>>();
+        mContainers = new HashSet<TaskContainer>();
         mEmittersById = new HashMap<Object, WeakReference<?>>();
 
         mUILooper = Looper.getMainLooper();
@@ -66,7 +68,7 @@ public class TaskManagerAndroid implements TaskManager
         if (Looper.myLooper() != mUILooper) throw TaskManagerException.mustBeExecutedFromUIThread();
         if (manage(pEmitter, null) != null) {
             // Try to terminate any task that could be terminated now that a new "potential emitter" is registered.
-            for (TaskContainer<?> lContainer : mContainers) {
+            for (TaskContainer lContainer : mContainers) {
                 if (lContainer.finish()) {
                     notifyFinished(lContainer);
                 }
@@ -74,7 +76,7 @@ public class TaskManagerAndroid implements TaskManager
         }
     }
 
-    protected Object manage(Object pEmitter, TaskContainer<?> pParentContainer)
+    protected Object manage(Object pEmitter, TaskContainer pParentContainer)
     {
         // Save the new task emitter in the reference list. Replace the existing one if any according to its id (the old one is
         // considered obsolete). Emitter Id is computed by the configuration strategy. See DefaultConfiguration for an example.
@@ -151,19 +153,19 @@ public class TaskManagerAndroid implements TaskManager
     }
 
     @Override
-    public <TResult> void execute(Task<TResult> pTask)
+    public void execute(Task<?> pTask)
     {
         if (Looper.myLooper() != mUILooper) throw TaskManagerException.mustBeExecutedFromUIThread();
         execute(pTask, null);
     }
 
-    protected <TResult> void execute(Task<TResult> pTask, TaskContainer<?> pParentContainer)
+    protected void execute(Task<?> pTask, TaskContainer pParentContainer)
     {
         if (pTask == null) throw TaskManagerException.invalidTask();
 
         // Create a container to run the task.
         TaskConfiguration lTaskConfig = mManagerConfig.resolveConfiguration(pTask);
-        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, lTaskConfig, pParentContainer, mUIQueue);
+        TaskContainer lContainer = new TaskContainer(pTask, lTaskConfig, pParentContainer, mUIQueue);
         // Remember and run the new task. If an identical task is already executing, do nothing to prevent duplicate tasks.
         if (!mContainers.contains(lContainer)) {
             // Prepare the task (i.e. cache needed values) before adding it because the first operation can fail (and we don't
@@ -175,15 +177,26 @@ public class TaskManagerAndroid implements TaskManager
     }
 
     @Override
-    public <TResult> boolean listen(TaskResult<TResult> pTaskListener)
+    public boolean listen(TaskResult<?> pTaskResult)
     {
         if (Looper.myLooper() != mUILooper) throw TaskManagerException.mustBeExecutedFromUIThread();
-        return true;
+
+        return listen(pTaskResult, null);
     }
 
-    protected <TResult> boolean listen(TaskResult<TResult> pTaskListener, TaskContainer<?> pContainer)
+    protected boolean listen(TaskResult<?> pTaskResult, TaskContainer pContainer)
     {
-        return true;
+        if (pTaskResult == null) throw TaskManagerException.invalidTask();
+
+        boolean lTaskFound = false;
+
+        for (TaskContainer lContainer : mContainers) {
+            if (!mContainers.contains(lContainer)) {
+                lContainer.bindTo(pTaskResult);
+                lTaskFound = true;
+            }
+        }
+        return lTaskFound;
     }
 
     @Override
@@ -197,7 +210,7 @@ public class TaskManagerAndroid implements TaskManager
      * 
      * @param pContainer Finished task container.
      */
-    protected <TResult> void notifyFinished(final TaskContainer<TResult> pContainer)
+    protected void notifyFinished(final TaskContainer pContainer)
     {
         mContainers.remove(pContainer);
     }
@@ -205,21 +218,22 @@ public class TaskManagerAndroid implements TaskManager
 
     /**
      * TODO Explain why we implement TaskManager.
-     * 
-     * @param <TResult> Expected task result.
      */
-    private class TaskContainer<TResult> implements Runnable, TaskManager
+    private class TaskContainer implements Runnable, TaskManager
     {
+        // Handlers
+        private Task<?> mTask;
+        private TaskResult<?> mTaskResult;
+
         // Container info.
-        private Task<TResult> mTask;
         private Object mTaskId;
         private TaskConfiguration mTaskConfig;
         private boolean mIsInner;
-        private TaskContainer<?> mParentContainer;
+        private TaskContainer mParentContainer;
         private Handler mUIQueue;
 
         // Task result and state.
-        private TResult mResult;
+        private Object mResult;
         private Throwable mThrowable;
         private boolean mProcessed;
         private boolean mFinished;
@@ -228,13 +242,12 @@ public class TaskManagerAndroid implements TaskManager
         private List<TaskEmitter> mEmitters;
         private Runnable mProgressRunnable;
 
-        public TaskContainer(Task<TResult> pTask,
-                             TaskConfiguration pTaskConfig,
-                             TaskContainer<?> pParentContainer,
-                             Handler pUIQueue)
+        public TaskContainer(Task<?> pTask, TaskConfiguration pTaskConfig, TaskContainer pParentContainer, Handler pUIQueue)
         {
             super();
             mTask = pTask;
+            mTaskResult = pTask;
+
             mTaskId = (pTask instanceof TaskIdentity) ? ((TaskIdentity) pTask).getId() : null;
             mTaskConfig = pTaskConfig;
             mIsInner = false;
@@ -257,7 +270,7 @@ public class TaskManagerAndroid implements TaskManager
         public void prepareToRun()
         {
             // Go through the main class and each of its super classes and look for "this$" fields.
-            Class<?> lTaskClass = mTask.getClass();
+            Class<?> lTaskClass = mTaskResult.getClass();
             while (lTaskClass != Object.class) {
                 // If current class is an inner class...
                 if ((lTaskClass.getEnclosingClass() != null) && !Modifier.isStatic(lTaskClass.getModifiers())) {
@@ -267,11 +280,20 @@ public class TaskManagerAndroid implements TaskManager
                     for (Field lField : lTaskClass.getDeclaredFields()) {
                         if (lField.getName().startsWith("this$")) {
                             prepare(lField);
+                            // There should be only one outer reference per "class" in the Task class hierarchy. So we can stop as
+                            // soon as the field is found as there won't be another.
+                            break;
                         }
                     }
                 }
                 lTaskClass = lTaskClass.getSuperclass();
             }
+        }
+
+        public void bindTo(TaskResult<?> pTaskResult)
+        {
+            mTaskResult = pTaskResult; // TODO!!!!
+            prepareToRun();
         }
 
         /**
@@ -294,10 +316,10 @@ public class TaskManagerAndroid implements TaskManager
                 // If reference is null, that means the emitter is probably used in a parent container and
                 // already managed. Try to find its Id in parent containers.
                 else {
-                    TaskContainer<?> lParentContainer = mParentContainer;
+                    TaskContainer lParentContainer = mParentContainer;
                     while ((lEmitterId == null) && (lParentContainer != null)) {
                         for (TaskEmitter lParentEmitter : lParentContainer.mEmitters) {
-                            if (pField.getClass() == lParentEmitter.mEmitterField.getClass()) {
+                            if (pField.getType() == lParentEmitter.mEmitterField.getType()) {
                                 lEmitterId = lParentEmitter.mEmitterId;
                                 break;
                             }
@@ -309,7 +331,7 @@ public class TaskManagerAndroid implements TaskManager
                 if (lEmitterId != null) {
                     mEmitters.add(new TaskEmitter(pField, lEmitterId));
                 } else {
-                    throw TaskManagerException.invalidTask(mTask, "Emitter is null (recycled task?).");
+                    throw TaskManagerException.invalidTask(mTask, "Emitter Id couldn't be bound (see resolveEmitterId()).");
                 }
             } catch (IllegalArgumentException eIllegalArgumentException) {
                 throw TaskManagerException.internalError(eIllegalArgumentException);
@@ -365,6 +387,7 @@ public class TaskManagerAndroid implements TaskManager
                         if (lEmitterRef != null) {
                             lEmitter = lEmitterRef.get();
                             lEmitterDescriptor.mEmitterField.set(mTask, lEmitter);
+                            // TODO If mTask != mTaskResult
                         }
                         lRestored &= (lEmitter != null);
                     }
@@ -426,6 +449,7 @@ public class TaskManagerAndroid implements TaskManager
          * 
          * @return True if the task could be finished and its termination handlers executed or false otherwise.
          */
+        @SuppressWarnings({ "unchecked", "rawtypes" })
         protected boolean finish()
         {
             // Execute task termination handlers if they have not been yet (but only if the task has been fully processed).
@@ -435,7 +459,8 @@ public class TaskManagerAndroid implements TaskManager
 
             try {
                 if (mThrowable == null) {
-                    mTask.onFinish(this, mResult);
+                    // Note: Cast is safe since result type is guaranteed by the Task<TResult> interface (hence SuppressWarnings).
+                    ((Task) mTask).onFinish(this, mResult);
                 } else {
                     mTask.onFail(this, mThrowable);
                 }
@@ -467,15 +492,15 @@ public class TaskManagerAndroid implements TaskManager
         }
 
         @Override
-        public <TOtherResult> void execute(Task<TOtherResult> pTask)
+        public void execute(Task<?> pTask)
         {
             TaskManagerAndroid.this.execute(pTask, this);
         }
 
         @Override
-        public <TOtherResult> boolean listen(TaskResult<TOtherResult> pTaskListener)
+        public boolean listen(TaskResult<?> pTaskResult)
         {
-            return TaskManagerAndroid.this.listen(pTaskListener, this);
+            return TaskManagerAndroid.this.listen(pTaskResult, this);
         }
 
         @Override
@@ -516,7 +541,7 @@ public class TaskManagerAndroid implements TaskManager
             if (pOther == null) return false;
             if (getClass() != pOther.getClass()) return false;
 
-            TaskContainer<?> lOtherContainer = (TaskContainer<?>) pOther;
+            TaskContainer lOtherContainer = (TaskContainer) pOther;
             // Check equality on the user-defined task Id if possible.
             if (mTaskId != null) {
                 return mTaskId.equals(lOtherContainer.mTaskId);

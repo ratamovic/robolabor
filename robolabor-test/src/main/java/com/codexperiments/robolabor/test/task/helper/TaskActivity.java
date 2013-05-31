@@ -6,6 +6,7 @@ import android.support.v4.app.FragmentActivity;
 
 import com.codexperiments.robolabor.task.TaskIdentity;
 import com.codexperiments.robolabor.task.TaskManager;
+import com.codexperiments.robolabor.task.TaskResult;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
@@ -100,6 +101,16 @@ public class TaskActivity extends FragmentActivity
             }
         });
         return lTask;
+    }
+
+    public void listenInnerTask(final TaskResult<?> pTaskReuslt)
+    {
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                mTaskManager.listen(pTaskReuslt);
+            }
+        });
     }
 
     public HierarchicalTask runHierarchicalTask(final Integer pTaskResult)
