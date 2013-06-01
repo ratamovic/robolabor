@@ -1,6 +1,8 @@
 package com.codexperiments.robolabor.task;
 
-public interface TaskIdentity
+import com.codexperiments.robolabor.task.id.TaskId;
+
+public interface TaskIdentifiable
 {
     /**
      * Identity of a task. Two tasks are considered to be the same if they their Id object are equals. Only the equals() method is
@@ -13,5 +15,5 @@ public interface TaskIdentity
      * 
      * @return Identity of the Object. Must not be null.
      */
-    Object getId();
+    TaskId getId();
 }

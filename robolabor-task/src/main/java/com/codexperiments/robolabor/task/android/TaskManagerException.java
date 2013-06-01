@@ -1,6 +1,6 @@
 package com.codexperiments.robolabor.task.android;
 
-import com.codexperiments.robolabor.task.Task;
+import com.codexperiments.robolabor.task.TaskResult;
 
 /**
  * Indicates a case that should never happen and which indicates a programming or configuration error (e.g. a reflection call
@@ -22,7 +22,7 @@ public class TaskManagerException extends RuntimeException
 
     public static TaskManagerException internalError()
     {
-        return new TaskManagerException("Internal error inside the TaskManager");
+        return internalError(null);
     }
 
     public static TaskManagerException internalError(Throwable pThrowable)
@@ -30,14 +30,9 @@ public class TaskManagerException extends RuntimeException
         return new TaskManagerException(pThrowable, "Internal error inside the TaskManager");
     }
 
-    public static TaskManagerException invalidTask()
+    public static TaskManagerException emitterIdCouldNotBeBound(TaskResult<?> pTask)
     {
-        return new TaskManagerException("Invalid task : null value");
-    }
-
-    public static TaskManagerException invalidTask(Task<?> pTask, String pComplement)
-    {
-        return new TaskManagerException("Invalid task %1$s : %2$s", pTask, pComplement);
+        return new TaskManagerException("Invalid task %1$s : Emitter Id couldn't be bound (see resolveEmitterId()).", pTask);
     }
 
     public static TaskManagerException mustBeExecutedFromUIThread()

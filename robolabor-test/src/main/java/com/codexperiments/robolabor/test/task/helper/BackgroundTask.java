@@ -1,10 +1,7 @@
 package com.codexperiments.robolabor.test.task.helper;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.fail;
+import static org.hamcrest.CoreMatchers.*;
+import static org.junit.Assert.*;
 
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
@@ -13,9 +10,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.codexperiments.robolabor.task.TaskManager;
-import com.codexperiments.robolabor.task.util.ProgressiveTask;
+import com.codexperiments.robolabor.task.id.TaskRef;
+import com.codexperiments.robolabor.task.util.ProgressTask;
 
-public class BackgroundTask implements ProgressiveTask<Integer>
+public class BackgroundTask implements ProgressTask<Integer>
 {
     public static final int TASK_STEP_COUNT = 5;
     public static final int TASK_STEP_DURATION_MS = 1000;
@@ -23,6 +21,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
     public static final int TASK_TIMEOUT_MS = 10000;
     public static final int TASK_PROGRESS_TIMEOUT_MS = 2000;
 
+    private TaskRef<Integer> mTaskRef;
     private Boolean mCheckEmitterNull;
     private boolean mStepByStep;
     private int mStepCounter;
@@ -35,11 +34,6 @@ public class BackgroundTask implements ProgressiveTask<Integer>
     private CountDownLatch mTaskStepProgress;
     private CountDownLatch mTaskStepEnd;
     private CountDownLatch mTaskFinished;
-
-    public BackgroundTask(Integer pTaskResult)
-    {
-        this(pTaskResult, null, false);
-    }
 
     public BackgroundTask(Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
     {
@@ -59,6 +53,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
         mTaskFinished = new CountDownLatch(1);
     }
 
+    @Override
     public Integer onProcess(TaskManager pTaskManager) throws Exception
     {
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure task is executed only once.
@@ -78,6 +73,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
         return mTaskResult;
     }
 
+    @Override
     public void onProgress(TaskManager pTaskManager)
     {
         ++mProgressCounter;
@@ -86,6 +82,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
         }
     }
 
+    @Override
     public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
     {
         // Check if outer object reference has been restored (or not).
@@ -104,6 +101,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
         mTaskFinished.countDown();
     }
 
+    @Override
     public void onFail(TaskManager pTaskManager, Throwable pTaskException)
     {
         mTaskException = pTaskException;
@@ -122,6 +120,7 @@ public class BackgroundTask implements ProgressiveTask<Integer>
                     mTaskStepStart.reset();
                 }
             } catch (TimeoutException eTimeoutException) {
+                fail();
             } catch (InterruptedException eInterruptedException) {
                 fail();
             } catch (BrokenBarrierException eBrokenBarrierException) {
@@ -233,6 +232,16 @@ public class BackgroundTask implements ProgressiveTask<Integer>
     protected Boolean getStepByStep()
     {
         return mStepByStep;
+    }
+
+    public TaskRef<Integer> getTaskRef()
+    {
+        return mTaskRef;
+    }
+
+    public void setTaskRef(TaskRef<Integer> pTaskRef)
+    {
+        mTaskRef = pTaskRef;
     }
 
     /**

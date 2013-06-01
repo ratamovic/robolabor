@@ -1,9 +1,7 @@
 package com.codexperiments.robolabor.test.task;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.CoreMatchers.nullValue;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.CoreMatchers.*;
+import static org.junit.Assert.*;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -13,14 +11,16 @@ import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskProgress;
 import com.codexperiments.robolabor.task.TaskResult;
+import com.codexperiments.robolabor.task.android.DefaultConfigurationAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerException;
-import com.codexperiments.robolabor.task.android.configuration.DefaultConfiguration;
+import com.codexperiments.robolabor.task.id.TaskRef;
 import com.codexperiments.robolabor.test.common.TestCase;
+import com.codexperiments.robolabor.test.task.helper.BackgroundTaskResult;
 import com.codexperiments.robolabor.test.task.helper.BackgroundTask;
 import com.codexperiments.robolabor.test.task.helper.TaskActivity;
-import com.codexperiments.robolabor.test.task.helper.TaskActivity.BugHierarchicalTask;
 import com.codexperiments.robolabor.test.task.helper.TaskActivity.HierarchicalTask;
+import com.codexperiments.robolabor.test.task.helper.TaskActivity.HierarchicalTask_CorruptionBug;
 import com.codexperiments.robolabor.test.task.helper.TaskEmitter;
 import com.codexperiments.robolabor.test.task.helper.TaskFragment;
 
@@ -58,7 +58,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
     protected void setUpOnUIThread() throws Exception
     {
         super.setUpOnUIThread();
-        mTaskManager = new TaskManagerAndroid(new DefaultConfiguration());
+        mTaskManager = new TaskManagerAndroid(new DefaultConfigurationAndroid());
         getApplicationContext().registerManager(mTaskManager);
     }
 
@@ -476,38 +476,110 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTask.getProgressCounter(), equalTo(1));
     }
 
-    // public void testListen_inner_managed_persisting_activity() throws InterruptedException
-    // {
-    // TaskActivity lInitialActivity = getActivity();
-    // BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
-    // lInitialActivity.listenInnerTask(new TaskResult<Integer>() {
-    // public void getKind(Task<?> pTask, Class<?> pResult)
-    // {
-    //
-    // }
-    //
-    // public void onFail(TaskManager pArg0, Throwable pArg1)
-    // {
-    // }
-    //
-    // public void onFinish(TaskManager pArg0, Integer pArg1)
-    // {
-    // }
-    // });
-    // assertThat(lTask.awaitFinished(), equalTo(true));
-    //
-    // assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult));
-    // assertThat(lInitialActivity.getTaskException(), nullValue());
-    // }
+    public void testRebind_inner_managed_persisting_activity() throws InterruptedException
+    {
+        TaskActivity lInitialActivity = getActivity();
+        BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
+        BackgroundTaskResult lTaskResult = lInitialActivity.rebindInnerTask(lTask, true);
+        assertThat(lTaskResult.awaitFinished(), equalTo(true));
+
+        assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lInitialActivity.getTaskException(), nullValue());
+        assertThat(lTaskResult.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lTaskResult.getTaskException(), nullValue());
+    }
+
+    public void testRebind_inner_managed_recreated_activity() throws InterruptedException
+    {
+        TaskActivity lInitialActivity = getActivity();
+        BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
+        rotateActivitySeveralTimes(2);
+        BackgroundTaskResult lTaskResult = lInitialActivity.rebindInnerTask(lTask, true);
+        rotateActivitySeveralTimes(2);
+        assertThat(lTaskResult.awaitFinished(), equalTo(true));
+
+        TaskActivity lFinalActivity = getActivity();
+        assertThat(lFinalActivity, not(equalTo(lInitialActivity))); // Ensure activity has been recreated.
+        assertThat(lFinalActivity.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lFinalActivity.getTaskException(), nullValue());
+        assertThat(lTaskResult.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lTaskResult.getTaskException(), nullValue());
+    }
+
+    public void testRebind_inner_managed_destroyed_activity() throws InterruptedException
+    {
+        TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
+        BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
+        BackgroundTaskResult lTaskResult = lInitialActivity.rebindInnerTask(lTask, true);
+        lInitialActivity = terminateActivity(lInitialActivity);
+        assertThat(lTaskResult.awaitFinished(), equalTo(true));
+
+        assertThat(lTaskResult.getTaskResult(), equalTo(mTaskResult));
+        assertThat(lTaskResult.getTaskException(), nullValue());
+    }
+
+    public void testRebind_inner_managed_afterTaskEnded() throws InterruptedException
+    {
+        TaskActivity lInitialActivity = getActivity();
+        BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+
+        BackgroundTaskResult lTaskResult = lInitialActivity.rebindInnerTask(lTask, false);
+        assertThat(lTaskResult.awaitFinished(), equalTo(false));
+        assertThat(lTaskResult.getTaskResult(), nullValue());
+        assertThat(lTaskResult.getTaskException(), nullValue());
+    }
+
+    public void testRebind_inner_managed_nonExistingTask() throws Throwable
+    {
+        runTestOnUiThread(new Runnable() {
+            public void run()
+            {
+                boolean lBound = mTaskManager.rebind(new TaskRef<Integer>(Integer.MAX_VALUE), new TaskResult<Integer>() {
+                    public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
+                    {
+                    }
+
+                    public void onFail(TaskManager pTaskManager, Throwable pTaskException)
+                    {
+                    }
+                });
+                assertThat(lBound, equalTo(false));
+            }
+        });
+    }
 
     @UiThreadTest
     public void testExecute_failure_taskNull() throws InterruptedException
     {
         try {
+            mTaskManager.manage(null);
+            fail();
+        } catch (NullPointerException eNullPointerException) {
+        }
+
+        try {
+            mTaskManager.unmanage(null);
+            fail();
+        } catch (NullPointerException eNullPointerException) {
+        }
+
+        try {
             mTaskManager.execute(null);
             fail();
-        } catch (TaskManagerException eTaskManagerException) {
-            // Success
+        } catch (NullPointerException eNullPointerException) {
+        }
+
+        try {
+            mTaskManager.rebind(null, new BackgroundTaskResult());
+            fail();
+        } catch (NullPointerException eNullPointerException) {
+        }
+
+        try {
+            mTaskManager.rebind(new TaskRef<Integer>(0), null);
+            fail();
+        } catch (NullPointerException eNullPointerException) {
         }
     }
 
@@ -535,15 +607,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         }
 
         try {
-            mTaskManager.listen(new TaskResult<Integer>() {
-                public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
-                {
-                }
-
-                public void onFail(TaskManager pTaskManager, Throwable pTaskException)
-                {
-                }
-            });
+            mTaskManager.rebind(new TaskRef<Integer>(0), new BackgroundTaskResult());
             fail();
         } catch (TaskManagerException eTaskManagerException) {
             // Success
@@ -581,10 +645,10 @@ public class TaskManagerTest extends TestCase<TaskActivity>
     /**
      * Bug that causes hierarchical tasks to corrupt emitter list. Shouldn't occur anymore.
      */
-    public void testExecute_inner_hierarchical() throws InterruptedException
+    public void testExecute_inner_hierarchical_corruptionBug() throws InterruptedException
     {
         TaskActivity lInitialActivity = getActivity();
-        BugHierarchicalTask lTask = lInitialActivity.bugRunHierarchicalTask(mTaskResult);
+        HierarchicalTask_CorruptionBug lTask = lInitialActivity.runHierarchicalTask_corruptionBug(mTaskResult);
         rotateActivitySeveralTimes(4);
         assertThat(lTask.awaitFinished(), equalTo(true));
         assertThat(lTask.getBackgroundTask2().awaitFinished(), equalTo(true));

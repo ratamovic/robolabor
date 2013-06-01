@@ -1,14 +1,17 @@
 package com.codexperiments.robolabor.task;
 
+import com.codexperiments.robolabor.task.id.TaskRef;
+
+
 public interface TaskManager
 {
     void manage(Object pEmitter);
 
     void unmanage(Object pEmitter);
 
-    void execute(Task<?> pTask);
+    <TResult> TaskRef<TResult> execute(Task<TResult> pTask);
 
-    boolean listen(TaskResult<?> pTaskResult);
+    <TResult> boolean rebind(TaskRef<TResult> pTaskId, TaskResult<TResult> pTaskResult);
 
     void notifyProgress(TaskProgress pProgress);
 }

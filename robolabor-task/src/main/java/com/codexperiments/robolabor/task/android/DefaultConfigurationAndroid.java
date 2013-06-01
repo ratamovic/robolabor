@@ -1,4 +1,4 @@
-package com.codexperiments.robolabor.task.android.configuration;
+package com.codexperiments.robolabor.task.android;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -7,13 +7,12 @@ import java.util.concurrent.ThreadFactory;
 import android.app.Activity;
 
 import com.codexperiments.robolabor.task.Task;
-import com.codexperiments.robolabor.task.android.TaskManagerAndroid.ManagerConfiguration;
 import com.codexperiments.robolabor.task.android.TaskManagerAndroid.TaskConfiguration;
 
 /**
  * Example configuration that handles basic Android components: Activity and Fragments.
  */
-public class DefaultConfiguration implements ManagerConfiguration
+public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerConfiguration
 {
     /**
      * Task configuration to execute tasks one by one in the order they were submitted, like a queue. This emulates the AsyncTask
@@ -23,7 +22,7 @@ public class DefaultConfiguration implements ManagerConfiguration
     private Class<?> mFragmentClass;
     private Class<?> mFragmentCompatClass;
 
-    public DefaultConfiguration()
+    public DefaultConfigurationAndroid()
     {
         super();
         mSerialConfiguration = buildTaskConfiguration();

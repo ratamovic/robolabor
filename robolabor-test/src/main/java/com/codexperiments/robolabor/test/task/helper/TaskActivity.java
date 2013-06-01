@@ -1,12 +1,14 @@
 package com.codexperiments.robolabor.test.task.helper;
 
+import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.*;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
 
-import com.codexperiments.robolabor.task.TaskIdentity;
+import com.codexperiments.robolabor.task.TaskIdentifiable;
 import com.codexperiments.robolabor.task.TaskManager;
-import com.codexperiments.robolabor.task.TaskResult;
+import com.codexperiments.robolabor.task.id.IntegerTaskId;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
@@ -97,20 +99,23 @@ public class TaskActivity extends FragmentActivity
         runOnUiThread(new Runnable() {
             public void run()
             {
-                mTaskManager.execute(lTask);
+                lTask.setTaskRef(mTaskManager.execute(lTask));
             }
         });
         return lTask;
     }
 
-    public void listenInnerTask(final TaskResult<?> pTaskReuslt)
+    public BackgroundTaskResult rebindInnerTask(final BackgroundTask pBackgroundTask, final boolean expectTaskBound)
     {
+        final BackgroundTaskResult lResult = new InnerResult(mCheckEmitterNull);
         runOnUiThread(new Runnable() {
             public void run()
             {
-                mTaskManager.listen(pTaskReuslt);
+                boolean lBound = mTaskManager.rebind(pBackgroundTask.getTaskRef(), lResult);
+                assertThat(lBound, equalTo(expectTaskBound));
             }
         });
+        return lResult;
     }
 
     public HierarchicalTask runHierarchicalTask(final Integer pTaskResult)
@@ -230,18 +235,18 @@ public class TaskActivity extends FragmentActivity
     }
 
 
-    private class InnerTaskWithId extends InnerTask implements TaskIdentity
+    private class InnerTaskWithId extends InnerTask implements TaskIdentifiable
     {
-        private Integer mTaskId;
+        private IntegerTaskId mTaskId;
 
         public InnerTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
         {
             super(pTaskResult, pCheckEmitterNull, pStepByStep);
-            mTaskId = pTaskId;
+            mTaskId = new IntegerTaskId(pTaskId);
         }
 
         @Override
-        public Object getId()
+        public IntegerTaskId getId()
         {
             return mTaskId;
         }
@@ -286,9 +291,44 @@ public class TaskActivity extends FragmentActivity
         }
     }
 
-    public BugHierarchicalTask bugRunHierarchicalTask(final Integer pTaskResult)
+
+    private class InnerResult extends BackgroundTaskResult
     {
-        final BugHierarchicalTask lTask = new BugHierarchicalTask(pTaskResult, mCheckEmitterNull, mStepByStep);
+        public InnerResult(Boolean pCheckEmitterNull)
+        {
+            super(pCheckEmitterNull);
+        }
+
+        @Override
+        public Object getEmitter()
+        {
+            return TaskActivity.this;
+        }
+
+        @Override
+        public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
+        {
+            if (getEmitter() != null) {
+                mTaskResult = pTaskResult;
+            }
+            super.onFinish(pTaskManager, pTaskResult);
+        }
+
+        @Override
+        public void onFail(TaskManager pTaskManager, Throwable pTaskException)
+        {
+            if (getEmitter() != null) {
+                mTaskException = pTaskException;
+            }
+            super.onFail(pTaskManager, pTaskException);
+        }
+    }
+
+    public HierarchicalTask_CorruptionBug runHierarchicalTask_corruptionBug(final Integer pTaskResult)
+    {
+        final HierarchicalTask_CorruptionBug lTask = new HierarchicalTask_CorruptionBug(pTaskResult,
+                                                                                        mCheckEmitterNull,
+                                                                                        mStepByStep);
         runOnUiThread(new Runnable() {
             public void run()
             {
@@ -299,11 +339,13 @@ public class TaskActivity extends FragmentActivity
     }
 
 
-    public class BugHierarchicalTask extends InnerTask
+    public class HierarchicalTask_CorruptionBug extends InnerTask
     {
         private BackgroundTask mBackgroundTask2;
 
-        public BugHierarchicalTask(final Integer pTaskResult, final Boolean pCheckEmitterNull, final boolean pStepByStep)
+        public HierarchicalTask_CorruptionBug(final Integer pTaskResult,
+                                              final Boolean pCheckEmitterNull,
+                                              final boolean pStepByStep)
         {
             super(pTaskResult, pCheckEmitterNull, pStepByStep);
             mBackgroundTask2 = new InnerTask(pTaskResult + 1, pCheckEmitterNull, pStepByStep) {
