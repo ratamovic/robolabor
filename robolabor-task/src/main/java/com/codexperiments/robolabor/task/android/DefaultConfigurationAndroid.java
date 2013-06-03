@@ -94,7 +94,7 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
         } else if (mFragmentCompatClass != null && mFragmentCompatClass.isInstance(pEmitter)) {
             return resolveFragmentId((android.support.v4.app.Fragment) pEmitter);
         }
-        return null; // resolveDefaultId(pEmitter);
+        return null;
     }
 
     /**
@@ -112,7 +112,7 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
 
     /**
      * Typically, an Android Fragment is identified either by an Id (the Id of the component it is inserted in) or a Tag ( which
-     * is a String).If none of these elements is available, then
+     * is a String).If none of these elements is available, then Fragment's class is used instead.
      * 
      * @param pFragment Fragment to find the Id of.
      * @return Fragment Id if not 0, Fragment Tag if not empty or else its Fragment class.
@@ -120,7 +120,6 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
     protected Object resolveFragmentId(android.app.Fragment pFragment)
     {
         if (pFragment.getId() > 0) {
-            // TODO An Integer Id is not something unique. Need to append the class type too.
             return pFragment.getId();
         } else if (pFragment.getTag() != null && !pFragment.getTag().isEmpty()) {
             return pFragment.getTag();
@@ -130,16 +129,11 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
     }
 
     /**
-     * Typically, an Android Fragment is identified either by an Id (the Id of the component it is inserted in) or a Tag ( which
-     * is a String).If none of these elements is available, then
-     * 
-     * @param pFragment Fragment to find the Id of.
-     * @return Fragment Id if not 0, Fragment Tag if not empty or else its Fragment class.
+     * Same as the homonym method but for fragments from the compatiblity library.
      */
     protected Object resolveFragmentId(android.support.v4.app.Fragment pFragment)
     {
         if (pFragment.getId() > 0) {
-            // TODO An Integer Id is not something unique. Need to append the class type too.
             return pFragment.getId();
         } else if (pFragment.getTag() != null && !pFragment.getTag().isEmpty()) {
             return pFragment.getTag();
@@ -147,18 +141,6 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
             return pFragment.getClass();
         }
     }
-
-    //
-    // /**
-    // * If no information is available, the emitter class is used by default as an Id.
-    // *
-    // * @param pEmitter Emitter to find the Id of.
-    // * @return Emitter class.
-    // */
-    // protected Object resolveDefaultId(Object pEmitter)
-    // {
-    // return pEmitter.getClass();
-    // }
 
     @Override
     public TaskConfiguration resolveConfiguration(Task<?> pTask)

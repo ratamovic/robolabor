@@ -30,6 +30,11 @@ public class TaskManagerException extends RuntimeException
         return new TaskManagerException(pThrowable, "Internal error inside the TaskManager.");
     }
 
+    public static TaskManagerException emitterNotManaged(Object pEmitterId, Object pEmitter)
+    {
+        return new TaskManagerException("A call to manage for emitter %2$s with Id %1$s is missing).", pEmitterId, pEmitter);
+    }
+
     public static TaskManagerException invalidEmitterId(Object pEmitterId, Object pEmitter)
     {
         return new TaskManagerException("Emitter Id %1$s is invalid for emitter %2$s.", pEmitterId, pEmitter);

@@ -59,7 +59,7 @@ public class TaskManagerAndroid implements TaskManager
     // All the current running tasks.
     private Set<TaskContainer<?>> mContainers;
     // Keep tracks of all emitters.
-    private Map<Object, WeakReference<?>> mEmittersById;
+    private Map<TaskEmitterId, WeakReference<?>> mEmittersById;
 
     private Handler mUIQueue;
     private Looper mUILooper;
@@ -74,7 +74,7 @@ public class TaskManagerAndroid implements TaskManager
         super();
         mManagerConfig = pConfig;
         mContainers = new HashSet<TaskContainer<?>>();
-        mEmittersById = new HashMap<Object, WeakReference<?>>();
+        mEmittersById = new HashMap<TaskEmitterId, WeakReference<?>>();
 
         mUILooper = Looper.getMainLooper();
         mUIQueue = new Handler(mUILooper);
@@ -84,18 +84,6 @@ public class TaskManagerAndroid implements TaskManager
     public void manage(Object pEmitter)
     {
         if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
-
-        manage(pEmitter, null);
-        // Try to terminate any task we can, which is possible if the new registered object is one of their emitter.
-        for (TaskContainer<?> lContainer : mContainers) {
-            if (lContainer.finish()) {
-                notifyFinished(lContainer);
-            }
-        }
-    }
-
-    protected Object manage(Object pEmitter, TaskContainer<?> pParentContainer)
-    {
         if (pEmitter == null) throw new NullPointerException("Emitter is null");
 
         // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
@@ -105,38 +93,22 @@ public class TaskManagerAndroid implements TaskManager
         // Emitter id must not be the emitter itself or we have a leak. Warn user about this (tempting) configuration misuse.
         if (lEmitterId == pEmitter) throw invalidEmitterId(lEmitterId, pEmitter);
 
-        // If user has requested explicitly to manage the emitter, then just obey...
-        if (pParentContainer == null) {
-            // ... but of course we need an Id to manage it!
-            if (lEmitterId == null) {
-                throw invalidEmitterId(lEmitterId, pEmitter);
-            }
-            // Save the reference of the emitter. A weak reference is used to avoid memory leaks.
-            else {
-                mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
-            }
+        // ... but of course we need an Id to manage it!
+        if (lEmitterId == null) {
+            throw invalidEmitterId(lEmitterId, pEmitter);
         }
-        // If the present method is invoked internally from prepareToRun()...
+        // Save the reference of the emitter. A weak reference is used to avoid memory leaks.
         else {
-            // An unmanaged object is likely not to have any Id defined in the configuration. So a unique create one.
-            if (lEmitterId == null) {
-                // For unmanaged objects, which are unique "by reference", we use the weak reference itself as a key since a
-                // WeakReference doesn't override Object.equals() (i.e. it is unique "by reference" too). This is an optimization
-                // that could be perfectly replaced by a key "new Object()".
-                WeakReference<Object> lEmitterRef = new WeakReference<Object>(pEmitter);
-                mEmittersById.put(lEmitterRef, lEmitterRef);
-                lEmitterId = lEmitterRef;
-            }
-            // If emitter is managed by the user explicitly, do nothing. User can update reference himself through manage(Object).
-            // If emitter is not managed by the user explicitly but is already present in the emitter list because another task
-            // has been executed, do nothing. Indeed unmanaged emitter are unique and never need to be updated.
-            // If emitter is not managed by the user explicitly but is not present in the emitter list, then start managing it so
-            // that we will be able to restore its reference later (if it hasn't been garbage collected in-between).
-            else if (mEmittersById.get(lEmitterId) == null) {
-                mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
+            TaskEmitterId lTaskEmitterId = new TaskEmitterId(pEmitter.getClass(), lEmitterId);
+            mEmittersById.put(lTaskEmitterId, new WeakReference<Object>(pEmitter));
+        }
+
+        // Try to terminate any task we can, which is possible if the new registered object is one of their emitter.
+        for (TaskContainer<?> lContainer : mContainers) {
+            if (lContainer.finish()) {
+                notifyFinished(lContainer);
             }
         }
-        return lEmitterId;
     }
 
     @Override
@@ -152,11 +124,51 @@ public class TaskManagerAndroid implements TaskManager
         // short period of time).
         Object lEmitterId = mManagerConfig.resolveEmitterId(pEmitter);
         if (lEmitterId != null) {
-            WeakReference<?> lWeakRef = mEmittersById.get(lEmitterId);
+            TaskEmitterId lTaskEmitterId = new TaskEmitterId(pEmitter.getClass(), lEmitterId); // TODO Cache to avoid an alloc?
+            WeakReference<?> lWeakRef = mEmittersById.get(lTaskEmitterId);
             if ((lWeakRef != null) && (lWeakRef.get() == pEmitter)) {
-                mEmittersById.remove(lEmitterId);
+                mEmittersById.remove(lTaskEmitterId);
             }
         }
+    }
+
+    /**
+     * TODO Comments
+     * 
+     * @param pEmitter
+     * @return
+     */
+    protected TaskEmitterId resolveId(Object pEmitter)
+    {
+        // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
+        // considered obsolete). Emitter Id is computed by the configuration strategy. Note that an emitter Id can be null if no
+        // emitter dereferencing should be applied.
+        Object lEmitterId = mManagerConfig.resolveEmitterId(pEmitter);
+        // Emitter id must not be the emitter itself or we have a leak. Warn user about this (tempting) configuration misuse.
+        // Note that when we arrive here, pEmitter cannot be null.
+        if (lEmitterId == pEmitter) throw invalidEmitterId(lEmitterId, pEmitter);
+
+        WeakReference<Object> lEmitterRef = new WeakReference<Object>(pEmitter);
+        // An unmanaged object doesn't have any Id defined in the configuration, so create a unique one. For unmanaged objects,
+        // which are unique "by reference", we use the WeakReference itself since it doesn't override Object.equals() (i.e. it is
+        // unique "by reference" too). This is an optimization that could be perfectly replaced by something like "new Object()".
+        TaskEmitterId lTaskEmitterId = new TaskEmitterId(pEmitter.getClass(), (lEmitterId != null) ? lEmitterId : lEmitterRef);
+        // If emitter is managed by the user explicitly and is properly registered in the emitter list, do nothing. User can
+        // update reference himself through manage(Object).
+        // If emitter is managed (i.e. emitter Id defined) but is not in the emitter list, then a call to manage() is missing.
+        // Throw an exception to warn the user.
+        // If emitter is not managed by the user explicitly but is already present in the emitter list because another task
+        // has been executed by the same emitter, do nothing. Indeed unmanaged emitter are unique and never need to be updated.
+        // If emitter is not managed by the user explicitly but is not present in the emitter list, then start managing it so
+        // that we will be able to restore its reference later (if it hasn't been garbage collected in-between).
+        if (mEmittersById.get(lTaskEmitterId) == null) {
+            if (lEmitterId != null) {
+                throw emitterNotManaged(lEmitterId, pEmitter);
+            } else {
+                mEmittersById.put(lTaskEmitterId, lEmitterRef);
+            }
+        }
+        return lTaskEmitterId;
     }
 
     /**
@@ -172,7 +184,7 @@ public class TaskManagerAndroid implements TaskManager
      * @param pEmitterId Id of the object that must be resolved.
      * @return Weak reference pointing to the managed object. May be null or contain a null reference.
      */
-    protected WeakReference<?> resolve(Object pEmitterId)
+    protected WeakReference<?> resolveEmitter(TaskEmitterId pEmitterId)
     {
         return mEmittersById.get(pEmitterId);
     }
@@ -340,10 +352,10 @@ public class TaskManagerAndroid implements TaskManager
                 pField.setAccessible(true);
 
                 // Retrieve the emitter by extracting it "reflectively" from the task field and compute its Id.
-                Object lEmitterId = null;
-                Object lEmitter = pField.get(mTaskResult);
+                TaskEmitterId lEmitterId = null;
+                Object lEmitter = pField.get(mTaskResult); // TODO Should use mTask if task is emitted from the onProcess method.
                 if (lEmitter != null) {
-                    lEmitterId = TaskManagerAndroid.this.manage(lEmitter, this);
+                    lEmitterId = TaskManagerAndroid.this.resolveId(lEmitter);
                 }
                 // If reference is null, that means the emitter is probably used in a parent container and
                 // already managed. Try to find its Id in parent containers.
@@ -414,7 +426,7 @@ public class TaskManagerAndroid implements TaskManager
                 // Restore references for current container.
                 if (mIsInner) {
                     for (TaskEmitter lEmitterDescriptor : mEmitters) {
-                        WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolve(lEmitterDescriptor.mEmitterId);
+                        WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolveEmitter(lEmitterDescriptor.mEmitterId);
                         Object lEmitter = null;
                         if (lEmitterRef != null) {
                             lEmitter = lEmitterRef.get();
@@ -622,15 +634,67 @@ public class TaskManagerAndroid implements TaskManager
 
 
     // TODO TaskEmitter should be renamed to something like TaskEmitterDescriptor
-    private static class TaskEmitter
+    private static final class TaskEmitter
     {
-        private Field mEmitterField;
-        private Object mEmitterId;
+        private final Field mEmitterField;
+        private final TaskEmitterId mEmitterId;
 
-        public TaskEmitter(Field pEmitterField, Object pEmitterId)
+        public TaskEmitter(Field pEmitterField, TaskEmitterId pEmitterId)
         {
             mEmitterField = pEmitterField;
             mEmitterId = pEmitterId;
+        }
+
+        @Override
+        public String toString()
+        {
+            return "TaskEmitter [mEmitterField=" + mEmitterField + ", mEmitterId=" + mEmitterId + "]";
+        }
+    }
+
+
+    private static final class TaskEmitterId
+    {
+        private final Class<?> mType;
+        private final Object mId;
+
+        public TaskEmitterId(Class<?> pType, Object pId)
+        {
+            super();
+            mType = pType;
+            mId = pId;
+        }
+
+        @Override
+        public boolean equals(Object pOther)
+        {
+            if (this == pOther) return true;
+            if (pOther == null) return false;
+            if (getClass() != pOther.getClass()) return false;
+
+            TaskEmitterId lOther = (TaskEmitterId) pOther;
+            if (mId == null) {
+                if (lOther.mId != null) return false;
+            } else if (!mId.equals(lOther.mId)) return false;
+
+            if (mType == null) return lOther.mType == null;
+            else return mType.equals(lOther.mType);
+        }
+
+        @Override
+        public int hashCode()
+        {
+            final int prime = 31;
+            int result = 1;
+            result = prime * result + ((mId == null) ? 0 : mId.hashCode());
+            result = prime * result + ((mType == null) ? 0 : mType.hashCode());
+            return result;
+        }
+
+        @Override
+        public String toString()
+        {
+            return "TaskEmitterId [mType=" + mType + ", mId=" + mId + "]";
         }
     }
 
