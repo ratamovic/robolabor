@@ -8,7 +8,7 @@ import android.support.v4.app.FragmentActivity;
 
 import com.codexperiments.robolabor.task.TaskIdentifiable;
 import com.codexperiments.robolabor.task.TaskManager;
-import com.codexperiments.robolabor.task.id.IntegerTaskId;
+import com.codexperiments.robolabor.task.id.IntTaskId;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
@@ -237,16 +237,16 @@ public class TaskActivity extends FragmentActivity
 
     private class InnerTaskWithId extends InnerTask implements TaskIdentifiable
     {
-        private IntegerTaskId mTaskId;
+        private IntTaskId mTaskId;
 
-        public InnerTaskWithId(Integer pTaskId, Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
+        public InnerTaskWithId(int pTaskId, Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
         {
             super(pTaskResult, pCheckEmitterNull, pStepByStep);
-            mTaskId = new IntegerTaskId(pTaskId);
+            mTaskId = new IntTaskId(pTaskId);
         }
 
         @Override
-        public IntegerTaskId getId()
+        public IntTaskId getId()
         {
             return mTaskId;
         }

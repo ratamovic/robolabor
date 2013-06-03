@@ -94,7 +94,7 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
         } else if (mFragmentCompatClass != null && mFragmentCompatClass.isInstance(pEmitter)) {
             return resolveFragmentId((android.support.v4.app.Fragment) pEmitter);
         }
-        return resolveDefaultId(pEmitter);
+        return null; // resolveDefaultId(pEmitter);
     }
 
     /**
@@ -148,16 +148,17 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
         }
     }
 
-    /**
-     * If no information is available, the emitter class is used by default as an Id.
-     * 
-     * @param pEmitter Emitter to find the Id of.
-     * @return Emitter class.
-     */
-    protected Object resolveDefaultId(Object pEmitter)
-    {
-        return pEmitter.getClass();
-    }
+    //
+    // /**
+    // * If no information is available, the emitter class is used by default as an Id.
+    // *
+    // * @param pEmitter Emitter to find the Id of.
+    // * @return Emitter class.
+    // */
+    // protected Object resolveDefaultId(Object pEmitter)
+    // {
+    // return pEmitter.getClass();
+    // }
 
     @Override
     public TaskConfiguration resolveConfiguration(Task<?> pTask)

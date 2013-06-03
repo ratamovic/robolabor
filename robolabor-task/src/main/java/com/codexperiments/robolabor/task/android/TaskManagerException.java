@@ -27,17 +27,22 @@ public class TaskManagerException extends RuntimeException
 
     public static TaskManagerException internalError(Throwable pThrowable)
     {
-        return new TaskManagerException(pThrowable, "Internal error inside the TaskManager");
+        return new TaskManagerException(pThrowable, "Internal error inside the TaskManager.");
     }
 
-    public static TaskManagerException emitterIdCouldNotBeBound(TaskResult<?> pTask)
+    public static TaskManagerException invalidEmitterId(Object pEmitterId, Object pEmitter)
     {
-        return new TaskManagerException("Invalid task %1$s : Emitter Id couldn't be bound (see resolveEmitterId()).", pTask);
+        return new TaskManagerException("Emitter Id %1$s is invalid for emitter %2$s.", pEmitterId, pEmitter);
+    }
+
+    public static TaskManagerException emitterIdCouldNotBeDetermined(TaskResult<?> pTask)
+    {
+        return new TaskManagerException("Invalid task %1$s : Emitter Id couldn't be bound.", pTask);
     }
 
     public static TaskManagerException mustBeExecutedFromUIThread()
     {
-        return new TaskManagerException("This method must be executed from the UI-Thread only");
+        return new TaskManagerException("This method must be executed from the UI-Thread only.");
     }
 
     public static TaskManagerException notCalledFromTask()

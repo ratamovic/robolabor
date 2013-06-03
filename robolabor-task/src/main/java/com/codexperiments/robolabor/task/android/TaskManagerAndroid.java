@@ -25,6 +25,19 @@ import com.codexperiments.robolabor.task.id.TaskId;
 import com.codexperiments.robolabor.task.id.TaskRef;
 
 /**
+ * Terminology:
+ * <ul>
+ * <li>Emitter: A task emitter is, in Java terms, an outer class object that requests a task to execute. Thus, a task can have
+ * emitters only if it is an inner, local or anonymous class. It's important to note that an object can have one or several
+ * emitters since this is allowed by the Java language (an inner class can keep reference to several enclosing class).</li>
+ * <li>Dereferencing: An inner class task keeps references to its emitters. These references must be removed temporarily during
+ * processing to avoid possible memory leaks (e.g. if a task references an activity that gets destroyed during processing).</li>
+ * <li>Referencing: References to emitters must be restored to execute task handlers (onFinish(), onFail(), onProgress()) or else,
+ * the task would be unable to communicate with the outside world since it has be dereferenced. Referencing is possible only if
+ * all the necessary emitters, managed by the TaskManager, are still reachable. If not, task handlers cannot be executed until all
+ * are reachable (and if configuration requires to keep results on hold).</li>
+ * </ul>
+ * 
  * TODO Handle timeout.
  * 
  * TODO Handle cancellation.
@@ -39,17 +52,21 @@ import com.codexperiments.robolabor.task.id.TaskRef;
  */
 public class TaskManagerAndroid implements TaskManager
 {
-    private static int TASK_ID_COUNTER;
+    // To generate task references.
+    private static int TASK_REF_COUNTER;
 
     private ManagerConfiguration mManagerConfig;
+    // All the current running tasks.
     private Set<TaskContainer<?>> mContainers;
+    // Keep tracks of all emitters.
     private Map<Object, WeakReference<?>> mEmittersById;
 
     private Handler mUIQueue;
     private Looper mUILooper;
 
     static {
-        TASK_ID_COUNTER = Integer.MIN_VALUE;
+
+        TASK_REF_COUNTER = Integer.MIN_VALUE;
     }
 
     public TaskManagerAndroid(ManagerConfiguration pConfig)
@@ -67,12 +84,12 @@ public class TaskManagerAndroid implements TaskManager
     public void manage(Object pEmitter)
     {
         if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
-        if (manage(pEmitter, null) != null) {
-            // Try to terminate any task that could be terminated now that a new "potential emitter" is registered.
-            for (TaskContainer<?> lContainer : mContainers) {
-                if (lContainer.finish()) {
-                    notifyFinished(lContainer);
-                }
+
+        manage(pEmitter, null);
+        // Try to terminate any task we can, which is possible if the new registered object is one of their emitter.
+        for (TaskContainer<?> lContainer : mContainers) {
+            if (lContainer.finish()) {
+                notifyFinished(lContainer);
             }
         }
     }
@@ -81,37 +98,41 @@ public class TaskManagerAndroid implements TaskManager
     {
         if (pEmitter == null) throw new NullPointerException("Emitter is null");
 
-        // Save the new task emitter in the reference list. Replace the existing one if any according to its id (the old one is
-        // considered obsolete). Emitter Id is computed by the configuration strategy. See DefaultConfiguration for an example.
-        // Note that an emitter Id can be null if no emitter dereferencement should be applied.
+        // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
+        // considered obsolete). Emitter Id is computed by the configuration strategy. Note that an emitter Id can be null if no
+        // emitter dereferencing should be applied.
         Object lEmitterId = mManagerConfig.resolveEmitterId(pEmitter);
-        if (lEmitterId != null) {
-            // If user has requested explicitly to manage the emitter, then just obey!
-            if (pParentContainer == null) {
-                // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
-                // collector do its job.
+        // Emitter id must not be the emitter itself or we have a leak. Warn user about this (tempting) configuration misuse.
+        if (lEmitterId == pEmitter) throw invalidEmitterId(lEmitterId, pEmitter);
+
+        // If user has requested explicitly to manage the emitter, then just obey...
+        if (pParentContainer == null) {
+            // ... but of course we need an Id to manage it!
+            if (lEmitterId == null) {
+                throw invalidEmitterId(lEmitterId, pEmitter);
+            }
+            // Save the reference of the emitter. A weak reference is used to avoid memory leaks.
+            else {
                 mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
             }
-            // If the present method is invoked internally from prepareToRun(),
-            else {
-                // TODO emitter id must not be a the emitter itself. Should find a way to forbid it.
-                // If emitter is managed by the user explicitly, do nothing. User can update reference through manage(Object).
-                if (mEmittersById.get(lEmitterId) == null) {
-                    mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
-                }
+        }
+        // If the present method is invoked internally from prepareToRun()...
+        else {
+            // An unmanaged object is likely not to have any Id defined in the configuration. So a unique create one.
+            if (lEmitterId == null) {
+                // For unmanaged objects, which are unique "by reference", we use the weak reference itself as a key since a
+                // WeakReference doesn't override Object.equals() (i.e. it is unique "by reference" too). This is an optimization
+                // that could be perfectly replaced by a key "new Object()".
+                WeakReference<Object> lEmitterRef = new WeakReference<Object>(pEmitter);
+                mEmittersById.put(lEmitterRef, lEmitterRef);
+                lEmitterId = lEmitterRef;
             }
-            // 1st condition: If user has requested explicitly to manage the emitter (by calling managed(Object)), then just obey!
-            // 2nd condition: If the present method is invoked internally from prepareToRun() (i.e. pParentContainer != null) and:
-            // If emitter is managed by the user explicitly (i.e. emitter is already present in the emitter list), do nothing.
-            // User can update reference himself through manage(Object).
+            // If emitter is managed by the user explicitly, do nothing. User can update reference himself through manage(Object).
             // If emitter is not managed by the user explicitly but is already present in the emitter list because another task
             // has been executed, do nothing. Indeed unmanaged emitter are unique and never need to be updated.
             // If emitter is not managed by the user explicitly but is not present in the emitter list, then start managing it so
-            // that we will be able to restore its reference later.
-            // TODO emitter id must not be a the emitter itself. Should find a way to forbid it.
-            if ((pParentContainer == null) || (mEmittersById.get(lEmitterId) == null)) {
-                // Save the reference of the emitter class. A weak reference is used to avoid memory leaks and let the garbage
-                // collector do its job.
+            // that we will be able to restore its reference later (if it hasn't been garbage collected in-between).
+            else if (mEmittersById.get(lEmitterId) == null) {
                 mEmittersById.put(lEmitterId, new WeakReference<Object>(pEmitter));
             }
         }
@@ -129,7 +150,6 @@ public class TaskManagerAndroid implements TaskManager
         // Typically, this could occur for example if an Activity X starts and then navigates to an Activity B which is,
         // according to Android lifecycle, started before A is stopped (the two activities are alive at the same time during a
         // short period of time).
-        // Note that an emitter Id can be null if a task is not an inner class and thus has no outer class.
         Object lEmitterId = mManagerConfig.resolveEmitterId(pEmitter);
         if (lEmitterId != null) {
             WeakReference<?> lWeakRef = mEmittersById.get(lEmitterId);
@@ -262,7 +282,7 @@ public class TaskManagerAndroid implements TaskManager
             mTask = pTask;
             mTaskResult = pTask;
 
-            mTaskRef = new TaskRef<TResult>(TASK_ID_COUNTER++);
+            mTaskRef = new TaskRef<TResult>(TASK_REF_COUNTER++);
             mTaskId = (pTask instanceof TaskIdentifiable) ? ((TaskIdentifiable) pTask).getId() : null;
             mTaskConfig = pTaskConfig;
             mIsInner = false;
@@ -343,7 +363,7 @@ public class TaskManagerAndroid implements TaskManager
                 if (lEmitterId != null) {
                     mEmitters.add(new TaskEmitter(pField, lEmitterId));
                 } else {
-                    throw emitterIdCouldNotBeBound(mTaskResult);
+                    throw emitterIdCouldNotBeDetermined(mTaskResult);
                 }
             } catch (IllegalArgumentException eIllegalArgumentException) {
                 throw internalError(eIllegalArgumentException);
@@ -355,7 +375,7 @@ public class TaskManagerAndroid implements TaskManager
         /**
          * Dereference the emitter (which is an outer object) from the task (which is an inner class) and return its Id. Emitter
          * references are stored internally so that they can be restored later when the task has finished its computation. Note
-         * that an emitter Id can be null if a task is not an inner class or if no dereferencement should be applied.
+         * that an emitter Id can be null if a task is not an inner class or if no dereferencing should be applied.
          * 
          * @param pTask Task to dereference.
          * @return Id of the emitter.

@@ -1,11 +1,10 @@
 package com.codexperiments.robolabor.task.id;
 
-
-public class IntegerTaskId implements TaskId
+public class IntTaskId implements TaskId
 {
-    private Integer mId;
+    private int mId;
 
-    public IntegerTaskId(Integer pId)
+    public IntTaskId(int pId)
     {
         super();
         mId = pId;
@@ -18,14 +17,16 @@ public class IntegerTaskId implements TaskId
         if (pOther == null) return false;
         if (getClass() != pOther.getClass()) return false;
 
-        IntegerTaskId lOther = (IntegerTaskId) pOther;
-        if (mId == null) return lOther.mId == null;
-        else return mId.equals(lOther.mId);
+        IntTaskId lOther = (IntTaskId) pOther;
+        return mId == lOther.mId;
     }
 
     @Override
     public int hashCode()
     {
-        return (mId == null) ? 0 : mId.hashCode();
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + mId;
+        return result;
     }
 }
