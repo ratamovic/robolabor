@@ -26,6 +26,8 @@ public class BackgroundTask implements ProgressTask<Integer>
     private boolean mStepByStep;
     private int mStepCounter;
     private int mProgressCounter;
+    private Integer mExpectedTaskResult;
+    private Exception mExpectedTaskException;
     private Integer mTaskResult;
     private Throwable mTaskException;
 
@@ -37,13 +39,27 @@ public class BackgroundTask implements ProgressTask<Integer>
 
     public BackgroundTask(Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
     {
+        this(pTaskResult, null, pCheckEmitterNull, pStepByStep);
+
+    }
+
+    public BackgroundTask(Exception pTaskException, Boolean pCheckEmitterNull, boolean pStepByStep)
+    {
+        this(null, pTaskException, pCheckEmitterNull, pStepByStep);
+
+    }
+
+    public BackgroundTask(Integer pTaskResult, Exception pTaskException, Boolean pCheckEmitterNull, boolean pStepByStep)
+    {
         super();
 
         mCheckEmitterNull = pCheckEmitterNull;
         mStepByStep = pStepByStep;
         mStepCounter = pStepByStep ? TASK_STEP_COUNT : 0;
         mProgressCounter = 0;
-        mTaskResult = pTaskResult;
+        mExpectedTaskResult = pTaskResult;
+        mExpectedTaskException = pTaskException;
+        mTaskResult = null;
         mTaskException = null;
 
         mAwaitFinished = !mStepByStep;
@@ -67,10 +83,13 @@ public class BackgroundTask implements ProgressTask<Integer>
             Thread.sleep(TASK_STEP_DURATION_MS);
             ++mStepCounter;
             pTaskManager.notifyProgress(this);
-
             notifyEnded();
         }
-        return mTaskResult;
+        if (mExpectedTaskException == null) {
+            return mExpectedTaskResult;
+        } else {
+            throw mExpectedTaskException;
+        }
     }
 
     @Override
@@ -198,10 +217,9 @@ public class BackgroundTask implements ProgressTask<Integer>
         }
     }
 
-    public void reset(Integer pTaskResult)
+    public void reset()
     {
         mTaskFinished = new CountDownLatch(1);
-        mTaskResult = pTaskResult;
     }
 
     public int getStepCounter()

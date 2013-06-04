@@ -105,6 +105,18 @@ public class TaskActivity extends FragmentActivity
         return lTask;
     }
 
+    public BackgroundTask runInnerTask(final Exception pTaskException)
+    {
+        final BackgroundTask lTask = new InnerTask(pTaskException, mCheckEmitterNull, mStepByStep);
+        runOnUiThread(new Runnable() {
+            public void run()
+            {
+                lTask.setTaskRef(mTaskManager.execute(lTask));
+            }
+        });
+        return lTask;
+    }
+
     public BackgroundTaskResult rebindInnerTask(final BackgroundTask pBackgroundTask, final boolean expectTaskBound)
     {
         final BackgroundTaskResult lResult = new InnerResult(mCheckEmitterNull);
@@ -207,6 +219,11 @@ public class TaskActivity extends FragmentActivity
         public InnerTask(Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
         {
             super(pTaskResult, pCheckEmitterNull, pStepByStep);
+        }
+
+        public InnerTask(Exception pTaskException, Boolean pCheckEmitterNull, boolean pStepByStep)
+        {
+            super(pTaskException, pCheckEmitterNull, pStepByStep);
         }
 
         @Override

@@ -24,6 +24,9 @@ import com.codexperiments.robolabor.test.task.helper.TaskActivity.HierarchicalTa
 import com.codexperiments.robolabor.test.task.helper.TaskEmitter;
 import com.codexperiments.robolabor.test.task.helper.TaskFragment;
 
+/**
+ * TODO Failure cases.
+ */
 public class TaskManagerTest extends TestCase<TaskActivity>
 {
     private Integer mTaskId;
@@ -376,7 +379,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lInitialActivity.getTaskException(), nullValue());
 
         // Execute previous task again, which is not allowed by TaskManager, hence the exception that is raised.
-        lTask.reset(nextResult());
+        lTask.reset();
         final AtomicBoolean lFailure = new AtomicBoolean(false);
         runTestOnUiThread(new Runnable() {
             public void run()
@@ -476,6 +479,43 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTask.getProgressCounter(), equalTo(1));
     }
 
+    public void testExecute_persisting_failure() throws InterruptedException
+    {
+        Exception lTaskException = new Exception("Something happened");
+        TaskActivity lInitialActivity = getActivity();
+        BackgroundTask lTask = lInitialActivity.runInnerTask(lTaskException);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+
+        assertThat(lInitialActivity.getTaskResult(), nullValue());
+        assertThat(lInitialActivity.getTaskException(), sameInstance((Throwable) lTaskException));
+    }
+
+    public void testExecute_recreated_failure() throws InterruptedException
+    {
+        Exception lTaskException = new Exception("Something happened");
+        TaskActivity lInitialActivity = getActivity();
+        BackgroundTask lTask = lInitialActivity.runInnerTask(lTaskException);
+        rotateActivitySeveralTimes(1);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+
+        TaskActivity lFinalActivity = getActivity();
+        assertThat(lFinalActivity, not(equalTo(lInitialActivity))); // Ensure activity has been recreated.
+        assertThat(lFinalActivity.getTaskResult(), nullValue());
+        assertThat(lFinalActivity.getTaskException(), sameInstance((Throwable) lTaskException));
+    }
+
+    public void testExecute_recreated_destroyed() throws InterruptedException
+    {
+        Exception lTaskException = new Exception("Something happened");
+        TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
+        BackgroundTask lTask = lInitialActivity.runInnerTask(lTaskException);
+        lInitialActivity = terminateActivity(lInitialActivity);
+        assertThat(lTask.awaitFinished(), equalTo(true));
+
+        assertThat(lTask.getTaskResult(), nullValue());
+        assertThat(lTask.getTaskException(), sameInstance((Throwable) lTaskException));
+    }
+
     public void testRebind_inner_managed_persisting_activity() throws InterruptedException
     {
         TaskActivity lInitialActivity = getActivity();
@@ -530,23 +570,19 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTaskResult.getTaskException(), nullValue());
     }
 
+    @UiThreadTest
     public void testRebind_inner_managed_nonExistingTask() throws Throwable
     {
-        runTestOnUiThread(new Runnable() {
-            public void run()
+        boolean lBound = mTaskManager.rebind(new TaskRef<Integer>(Integer.MAX_VALUE), new TaskResult<Integer>() {
+            public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
             {
-                boolean lBound = mTaskManager.rebind(new TaskRef<Integer>(Integer.MAX_VALUE), new TaskResult<Integer>() {
-                    public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
-                    {
-                    }
+            }
 
-                    public void onFail(TaskManager pTaskManager, Throwable pTaskException)
-                    {
-                    }
-                });
-                assertThat(lBound, equalTo(false));
+            public void onFail(TaskManager pTaskManager, Throwable pTaskException)
+            {
             }
         });
+        assertThat(lBound, equalTo(false));
     }
 
     @UiThreadTest
