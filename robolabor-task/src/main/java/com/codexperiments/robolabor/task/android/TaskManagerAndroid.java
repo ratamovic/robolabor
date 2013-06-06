@@ -48,7 +48,13 @@ import com.codexperiments.robolabor.task.id.TaskRef;
  * 
  * TODO Configuration option to make a task reusable.
  * 
- * TODO onRestore
+ * TODO onRestore / onCommit
+ * 
+ * TODO Extends Service?
+ * 
+ * TODO Listen without Task, just the emitter.
+ * 
+ * TODO Save TaskRefs list.
  */
 public class TaskManagerAndroid implements TaskManager
 {
