@@ -38,15 +38,7 @@ import com.codexperiments.robolabor.task.id.TaskRef;
  * are reachable (and if configuration requires to keep results on hold).</li>
  * </ul>
  * 
- * TODO Handle timeout.
- * 
  * TODO Handle cancellation.
- * 
- * TODO Configuration option so that termination handlers don't crash the application if a runtime exception occur.
- * 
- * TODO Configuration option to forbid use of unmanaged objects.
- * 
- * TODO Configuration option to make a task reusable.
  * 
  * TODO onRestore / onCommit
  * 
@@ -235,6 +227,10 @@ public class TaskManagerAndroid implements TaskManager
             if (lContainer.hasSameRef(pTaskRef)) {
                 // Cast safety is guaranteed by the execute() method that returns a properly typed TaskId for the new container.
                 ((TaskContainer<TResult>) lContainer).switchHandler(pTaskResult, pParentContainer);
+                // If Rebound task is over, execute newly attached handler.
+                if (lContainer.finish()) {
+                    notifyFinished(lContainer);
+                }
                 return true;
             }
         }
@@ -558,9 +554,9 @@ public class TaskManagerAndroid implements TaskManager
         }
 
         @Override
-        public <TOtherResult> boolean rebind(TaskRef<TOtherResult> pTaskId, TaskResult<TOtherResult> pTaskResult)
+        public <TOtherResult> boolean rebind(TaskRef<TOtherResult> pTaskRef, TaskResult<TOtherResult> pTaskResult)
         {
-            return TaskManagerAndroid.this.rebind(pTaskId, pTaskResult, this);
+            return TaskManagerAndroid.this.rebind(pTaskRef, pTaskResult, this);
         }
 
         @Override
@@ -717,6 +713,31 @@ public class TaskManagerAndroid implements TaskManager
         Object resolveEmitterId(Object pEmitter);
 
         TaskConfiguration resolveConfiguration(Task<?> pTask);
+
+        /**
+         * Configuration option to forbid use of unmanaged objects.
+         * 
+         * @return False if executing a task emitted by an unmanaged object should fail or true otherwise.
+         */
+        boolean allowUnmanagedEmitters();
+
+        /**
+         * Configuration option that allows task (not a task handler, i.e. TaskResult which can always be an inner class) declared
+         * as an inner class to be executed by the TaskManager. Using inner tasks is more risky if you are unexperienced since
+         * dereferencing is applied during processing (a NullPointerException is raised if you access the outer object members).
+         * This problem doesn't exist with tasks based on static or normal classes since no outer class reference is used.
+         * 
+         * @return True to allow inner task to be executed and false otherwise.
+         */
+        boolean allowInnerTasks();
+
+        /**
+         * Configuration option that makes termination handlers crash the application if an uncaught runtime exception occur.
+         * Useful for debugging purpose.
+         * 
+         * @return True to make application crash or false otherwise.
+         */
+        boolean crashOnHandlerFailure();
     }
 
 

@@ -40,6 +40,26 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
         }
     }
 
+    @Override
+    public Object resolveEmitterId(Object pEmitter)
+    {
+
+        if (pEmitter instanceof Activity) {
+            return resolveActivityId((Activity) pEmitter);
+        } else if (mFragmentClass != null && mFragmentClass.isInstance(pEmitter)) {
+            return resolveFragmentId((android.app.Fragment) pEmitter);
+        } else if (mFragmentCompatClass != null && mFragmentCompatClass.isInstance(pEmitter)) {
+            return resolveFragmentId((android.support.v4.app.Fragment) pEmitter);
+        }
+        return null;
+    }
+
+    @Override
+    public TaskConfiguration resolveConfiguration(Task<?> pTask)
+    {
+        return mSerialConfiguration;
+    }
+
     /**
      * Create an instance of the executor used to execute tasks. Returned executor is single-threaded and executes tasks
      * sequentially.
@@ -81,20 +101,6 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
                 return thread;
             }
         });
-    }
-
-    @Override
-    public Object resolveEmitterId(Object pEmitter)
-    {
-
-        if (pEmitter instanceof Activity) {
-            return resolveActivityId((Activity) pEmitter);
-        } else if (mFragmentClass != null && mFragmentClass.isInstance(pEmitter)) {
-            return resolveFragmentId((android.app.Fragment) pEmitter);
-        } else if (mFragmentCompatClass != null && mFragmentCompatClass.isInstance(pEmitter)) {
-            return resolveFragmentId((android.support.v4.app.Fragment) pEmitter);
-        }
-        return null;
     }
 
     /**
@@ -140,11 +146,5 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
         } else {
             return pFragment.getClass();
         }
-    }
-
-    @Override
-    public TaskConfiguration resolveConfiguration(Task<?> pTask)
-    {
-        return mSerialConfiguration;
     }
 }

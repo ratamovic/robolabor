@@ -26,6 +26,8 @@ import com.codexperiments.robolabor.test.task.helper.TaskFragment;
 
 /**
  * TODO Failure cases.
+ * 
+ * TODO keepResultOnHold cases.
  */
 public class TaskManagerTest extends TestCase<TaskActivity>
 {
