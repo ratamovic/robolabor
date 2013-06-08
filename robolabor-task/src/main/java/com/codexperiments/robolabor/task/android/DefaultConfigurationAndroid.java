@@ -7,26 +7,18 @@ import java.util.concurrent.ThreadFactory;
 import android.app.Activity;
 
 import com.codexperiments.robolabor.task.Task;
-import com.codexperiments.robolabor.task.android.TaskManagerAndroid.TaskConfiguration;
 
 /**
  * Example configuration that handles basic Android components: Activity and Fragments.
  */
-public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerConfiguration
+public class DefaultConfigurationAndroid implements TaskManagerAndroid.Configuration
 {
-    /**
-     * Task configuration to execute tasks one by one in the order they were submitted, like a queue. This emulates the AsyncTask
-     * behavior used since Android Gingerbread.
-     */
-    private TaskConfiguration mSerialConfiguration;
     private Class<?> mFragmentClass;
     private Class<?> mFragmentCompatClass;
+    private ExecutorService mSerialExecutor;
 
     public DefaultConfigurationAndroid()
     {
-        super();
-        mSerialConfiguration = buildTaskConfiguration();
-
         ClassLoader lClassLoader = getClass().getClassLoader();
         try {
             mFragmentClass = Class.forName("android.app.Fragment", false, lClassLoader);
@@ -38,6 +30,24 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
         } catch (ClassNotFoundException eClassNotFoundException) {
             // Current application doesn't embed compatibility library.
         }
+        mSerialExecutor = createExecutors();
+    }
+
+    /**
+     * Create a single-threaded executor which executes tasks sequentially.
+     * 
+     * @return Instance of the serial executor.
+     */
+    protected ExecutorService createExecutors()
+    {
+        return Executors.newSingleThreadExecutor(new ThreadFactory() {
+            public Thread newThread(Runnable pRunnable)
+            {
+                Thread thread = new Thread(pRunnable);
+                thread.setDaemon(true);
+                return thread;
+            }
+        });
     }
 
     @Override
@@ -52,55 +62,6 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
             return resolveFragmentId((android.support.v4.app.Fragment) pEmitter);
         }
         return null;
-    }
-
-    @Override
-    public TaskConfiguration resolveConfiguration(Task<?> pTask)
-    {
-        return mSerialConfiguration;
-    }
-
-    /**
-     * Create an instance of the executor used to execute tasks. Returned executor is single-threaded and executes tasks
-     * sequentially.
-     * 
-     * @return Instance of the serial executor.
-     */
-    protected TaskConfiguration buildTaskConfiguration()
-    {
-        return new TaskConfiguration() {
-            private ExecutorService mSerialExecutor = buildExecutor();
-
-            @Override
-            public boolean keepResultOnHold()
-            {
-                return false;
-            }
-
-            @Override
-            public ExecutorService getExecutor()
-            {
-                return mSerialExecutor;
-            }
-        };
-    }
-
-    /**
-     * Create an instance of the executor used to execute tasks. Returned executor is single-threaded and executes tasks
-     * sequentially. This method is called by buildTaskConfiguration() to initialize TaskConfiguration object.
-     * 
-     * @return Instance of the serial executor.
-     */
-    protected ExecutorService buildExecutor()
-    {
-        return Executors.newSingleThreadExecutor(new ThreadFactory() {
-            public Thread newThread(Runnable pRunnable)
-            {
-                Thread thread = new Thread(pRunnable);
-                thread.setDaemon(true);
-                return thread;
-            }
-        });
     }
 
     /**
@@ -146,5 +107,35 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.ManagerCo
         } else {
             return pFragment.getClass();
         }
+    }
+
+    @Override
+    public boolean keepResultOnHold(Task<?> pTask)
+    {
+        return false;
+    }
+
+    @Override
+    public ExecutorService resolveExecutor(Task<?> pTask)
+    {
+        return mSerialExecutor;
+    }
+
+    @Override
+    public boolean allowUnmanagedEmitters()
+    {
+        return true;
+    }
+
+    @Override
+    public boolean allowInnerTasks()
+    {
+        return true;
+    }
+
+    @Override
+    public boolean crashOnHandlerFailure()
+    {
+        return false;
     }
 }

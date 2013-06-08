@@ -518,7 +518,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTask.getTaskException(), sameInstance((Throwable) lTaskException));
     }
 
-    public void testRebind_inner_managed_persisting_activity() throws InterruptedException
+    public void testRebind_inner_managed_persisting() throws InterruptedException
     {
         TaskActivity lInitialActivity = getActivity();
         BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
@@ -531,7 +531,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTaskResult.getTaskException(), nullValue());
     }
 
-    public void testRebind_inner_managed_recreated_activity() throws InterruptedException
+    public void testRebind_inner_managed_recreated() throws InterruptedException
     {
         TaskActivity lInitialActivity = getActivity();
         BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
@@ -548,10 +548,11 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTaskResult.getTaskException(), nullValue());
     }
 
-    public void testRebind_inner_managed_destroyed_activity() throws InterruptedException
+    public void testRebind_inner_managed_destroyed() throws InterruptedException
     {
         TaskActivity lInitialActivity = getActivity(TaskActivity.dying());
         BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
+        // TODO There is a race condion here
         BackgroundTaskResult lTaskResult = lInitialActivity.rebindInnerTask(lTask, true);
         lInitialActivity = terminateActivity(lInitialActivity);
         assertThat(lTaskResult.awaitFinished(), equalTo(true));
