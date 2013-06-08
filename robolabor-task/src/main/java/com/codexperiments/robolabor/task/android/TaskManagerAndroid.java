@@ -38,6 +38,8 @@ import com.codexperiments.robolabor.task.id.TaskRef;
  * are reachable (and if configuration requires to keep results on hold).</li>
  * </ul>
  * 
+ * TODO Explain that Task always dereferenced => If execute from onProcess() then failure if accessing emitter.
+ * 
  * TODO Handle cancellation.
  * 
  * TODO onRestore / onCommit
@@ -199,15 +201,23 @@ public class TaskManagerAndroid implements TaskManager
     public <TResult> TaskRef<TResult> execute(Task<TResult> pTask)
     {
         if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
-        return execute(pTask, null);
+        return execute(pTask, pTask, null);
     }
 
-    protected <TResult> TaskRef<TResult> execute(Task<TResult> pTask, TaskContainer<?> pParentContainer)
+    @Override
+    public <TResult> TaskRef<TResult> execute(Task<TResult> pTask, TaskResult<TResult> pTaskResult)
+    {
+        return execute(pTask, pTaskResult, null);
+    }
+
+    protected <TResult> TaskRef<TResult> execute(Task<TResult> pTask,
+                                                 TaskResult<TResult> pTaskResult,
+                                                 TaskContainer<?> pParentContainer)
     {
         if (pTask == null) throw new NullPointerException("Task is null");
 
         // Create a container to run the task.
-        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, mConfig, pParentContainer);
+        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, pTaskResult, mConfig, pParentContainer);
         // Remember and run the new task. If an identical task is already executing, do nothing to prevent duplicate tasks.
         if (!mContainers.contains(lContainer)) {
             // Prepare the task (i.e. cache needed values) before adding it because the first operation can fail (and we don't
@@ -324,7 +334,6 @@ public class TaskManagerAndroid implements TaskManager
         private TaskRef<TResult> mTaskRef;
         private TaskId mTaskId;
         private Configuration mConfig;
-        private boolean mIsInner;
         private TaskContainer<?> mParentContainer;
 
         // Task result and state.
@@ -337,16 +346,18 @@ public class TaskManagerAndroid implements TaskManager
         private List<TaskEmitterDescriptor> mEmitterDescriptors;
         private Runnable mProgressRunnable;
 
-        public TaskContainer(Task<TResult> pTask, Configuration pConfig, TaskContainer<?> pParentContainer)
+        public TaskContainer(Task<TResult> pTask,
+                             TaskResult<TResult> pTaskResult,
+                             Configuration pConfig,
+                             TaskContainer<?> pParentContainer)
         {
             super();
             mTask = pTask;
-            mTaskResult = pTask;
+            mTaskResult = pTaskResult;
 
             mTaskRef = new TaskRef<TResult>(TASK_REF_COUNTER++);
             mTaskId = (pTask instanceof TaskIdentifiable) ? ((TaskIdentifiable) pTask).getId() : null;
             mConfig = pConfig;
-            mIsInner = false;
             mParentContainer = pParentContainer;
 
             mResult = null;
@@ -359,39 +370,76 @@ public class TaskManagerAndroid implements TaskManager
         }
 
         /**
-         * Locate all the outer object references (e.g. this$0) inside the task class, manage them if necessary and cache emitter
-         * field properties for later use. Check is performed recursively on all super classes too.
+         * Initialize the container (i.e. cache needed values, ...) before running it.
          */
         protected TaskRef<TResult> prepareToRun()
         {
             mEmitterDescriptors.clear();
 
-            // Go through the main class and each of its super classes and look for "this$" fields.
-            Class<?> lTaskClass = mTaskResult.getClass();
-            while (lTaskClass != Object.class) {
-                // If current class is an inner class...
-                if ((lTaskClass.getEnclosingClass() != null) && !Modifier.isStatic(lTaskClass.getModifiers())) {
-                    mIsInner = true;
+            if (mTask != mTaskResult) {
+                prepareTask();
+            }
+            prepareTaskResult();
 
+            needDereference(this);
+            return mTaskRef;
+        }
+
+        /**
+         * Dereference the task itself it is disjoint from its handlers. This is definitive.
+         */
+        private void prepareTask()
+        {
+            try {
+                Class<?> lTaskClass = mTask.getClass();
+                while (lTaskClass != Object.class) {
+                    // If current class is an inner class...
+                    if ((lTaskClass.getEnclosingClass() != null) && !Modifier.isStatic(lTaskClass.getModifiers())) {
+                        if (!mConfig.allowInnerTasks()) throw innerTasksNotAllowed(mTask);
+
+                        // Remove any references to the outer class.
+                        for (Field lField : lTaskClass.getDeclaredFields()) {
+                            if (lField.getName().startsWith("this$")) {
+                                lField.setAccessible(true);
+                                lField.set(mTask, null);
+                                // There should be only one outer reference per "class" in the Task class hierarchy. So we can
+                                // stop as soon as the field is found as there won't be another.
+                                break;
+                            }
+                        }
+                    }
+                    lTaskClass = lTaskClass.getSuperclass();
+                }
+            } catch (IllegalArgumentException eIllegalArgumentException) {
+                throw internalError(eIllegalArgumentException);
+            } catch (IllegalAccessException eIllegalAccessException) {
+                throw internalError(eIllegalAccessException);
+            }
+        }
+
+        /**
+         * Locate all the outer object references (e.g. this$0) inside the task class, manage them if necessary and cache emitter
+         * field properties for later use. Check is performed recursively on all super classes too.
+         */
+        private void prepareTaskResult()
+        {
+            // Go through the main class and each of its super classes and look for "this$" fields.
+            Class<?> lTaskResultClass = mTaskResult.getClass();
+            while (lTaskResultClass != Object.class) {
+                // If current class is an inner class...
+                if ((lTaskResultClass.getEnclosingClass() != null) && !Modifier.isStatic(lTaskResultClass.getModifiers())) {
                     // Find emitter references and manage them.
-                    for (Field lField : lTaskClass.getDeclaredFields()) {
+                    for (Field lField : lTaskResultClass.getDeclaredFields()) {
                         if (lField.getName().startsWith("this$")) {
-                            prepare(lField);
+                            prepareField(lField);
                             // There should be only one outer reference per "class" in the Task class hierarchy. So we can stop as
                             // soon as the field is found as there won't be another.
                             break;
                         }
                     }
                 }
-                lTaskClass = lTaskClass.getSuperclass();
+                lTaskResultClass = lTaskResultClass.getSuperclass();
             }
-
-            if (mIsInner && !mConfig.allowInnerTasks()) {
-                throw innerTasksNotAllowed(mTask);
-            }
-
-            needDereference(this);
-            return mTaskRef;
         }
 
         /**
@@ -400,14 +448,14 @@ public class TaskManagerAndroid implements TaskManager
          * 
          * @param pField Field to manage.
          */
-        private void prepare(Field pField)
+        private void prepareField(Field pField)
         {
             try {
                 pField.setAccessible(true);
 
-                // Retrieve the emitter by extracting it "reflectively" from the task field and compute its Id.
+                // Extract the emitter "reflectively" and compute its Id.
                 TaskEmitterId lEmitterId = null;
-                Object lEmitter = pField.get(mTaskResult); // TODO Should use mTask if task is emitted from the onProcess method.
+                Object lEmitter = pField.get(mTaskResult);
                 if (lEmitter != null) {
                     lEmitterId = TaskManagerAndroid.this.resolveId(lEmitter);
                 }
@@ -450,10 +498,8 @@ public class TaskManagerAndroid implements TaskManager
         {
             try {
                 if (mParentContainer != null) mParentContainer.dereferenceEmitter();
-                if (mIsInner) {
-                    for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                        lEmitterDescriptor.mEmitterField.set(mTaskResult, null);
-                    }
+                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                    lEmitterDescriptor.mEmitterField.set(mTaskResult, null);
                 }
             } catch (IllegalArgumentException eIllegalArgumentException) {
                 throw internalError(eIllegalArgumentException);
@@ -476,17 +522,14 @@ public class TaskManagerAndroid implements TaskManager
                 boolean lRestored = (mParentContainer == null) || mParentContainer.referenceEmitter();
 
                 // Restore references for current container.
-                if (mIsInner) {
-                    for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                        WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolveEmitter(lEmitterDescriptor.mEmitterId);
-                        Object lEmitter = null;
-                        if (lEmitterRef != null) {
-                            lEmitter = lEmitterRef.get();
-                            lEmitterDescriptor.mEmitterField.set(mTaskResult, lEmitter);
-                            // TODO If mTask != mTaskResult?
-                        }
-                        lRestored &= (lEmitter != null);
+                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                    WeakReference<?> lEmitterRef = TaskManagerAndroid.this.resolveEmitter(lEmitterDescriptor.mEmitterId);
+                    Object lEmitter = null;
+                    if (lEmitterRef != null) {
+                        lEmitter = lEmitterRef.get();
+                        lEmitterDescriptor.mEmitterField.set(mTaskResult, lEmitter);
                     }
+                    lRestored &= (lEmitter != null);
                 }
                 return lRestored;
             } catch (IllegalArgumentException eIllegalArgumentException) {
@@ -598,7 +641,13 @@ public class TaskManagerAndroid implements TaskManager
         @Override
         public <TOtherResult> TaskRef<TOtherResult> execute(Task<TOtherResult> pTask)
         {
-            return TaskManagerAndroid.this.execute(pTask, this);
+            return TaskManagerAndroid.this.execute(pTask, pTask, this);
+        }
+
+        @Override
+        public <TOtherResult> TaskRef<TOtherResult> execute(Task<TOtherResult> pTask, TaskResult<TOtherResult> pTaskResult)
+        {
+            return TaskManagerAndroid.this.execute(pTask, pTaskResult, this);
         }
 
         @Override
@@ -614,7 +663,7 @@ public class TaskManagerAndroid implements TaskManager
 
             Runnable lProgressRunnable;
             // @violations off: Optimization to avoid allocating a runnable each time progress is handled from the task itself.
-            if ((pTaskProgress == mTask) && (mProgressRunnable != null)) { // @violations on
+            if ((pTaskProgress == mTaskResult) && (mProgressRunnable != null)) { // @violations on
                 lProgressRunnable = mProgressRunnable;
             }
             // Create a runnable to handle task progress and reference/dereference properly the task before/after task execution.
@@ -637,7 +686,7 @@ public class TaskManagerAndroid implements TaskManager
                     }
                 };
                 // @violations off : Optimization that caches progress runnable if progress is handled from the task itself.
-                if (pTaskProgress == mTask) mProgressRunnable = lProgressRunnable; // @violations on
+                if (pTaskProgress == mTaskResult) mProgressRunnable = lProgressRunnable; // @violations on
             }
 
             // Progress is always executed on the UI-Thread but sent from a non-UI-Thread (except if called from onFinish() or
