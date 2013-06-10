@@ -25,28 +25,13 @@ import com.codexperiments.robolabor.task.id.TaskId;
 import com.codexperiments.robolabor.task.id.TaskRef;
 
 /**
- * Terminology:
- * <ul>
- * <li>Emitter: A task emitter is, in Java terms, an outer class object that requests a task to execute. Thus, a task can have
- * emitters only if it is an inner, local or anonymous class. It's important to note that an object can have one or several
- * emitters since this is allowed by the Java language (an inner class can keep reference to several enclosing class).</li>
- * <li>Dereferencing: An inner class task keeps references to its emitters. These references must be removed temporarily during
- * processing to avoid possible memory leaks (e.g. if a task references an activity that gets destroyed during processing).</li>
- * <li>Referencing: References to emitters must be restored to execute task handlers (onFinish(), onFail(), onProgress()) or else,
- * the task would be unable to communicate with the outside world since it has be dereferenced. Referencing is possible only if
- * all the necessary emitters, managed by the TaskManager, are still reachable. If not, task handlers cannot be executed until all
- * are reachable (and if configuration requires to keep results on hold).</li>
- * </ul>
- * 
  * TODO Explain that Task always dereferenced => If execute from onProcess() then failure if accessing emitter.
  * 
  * TODO Handle cancellation.
  * 
- * TODO onRestore / onCommit
+ * TODO onBeforeProcess / onRestore / onCommit
  * 
  * TODO Extends Service?
- * 
- * TODO Listen without Task, just the emitter.
  * 
  * TODO Save TaskRefs list.
  */
@@ -64,8 +49,8 @@ public class TaskManagerAndroid implements TaskManager
     // Keep tracks of all emitters.
     private Map<TaskEmitterId, WeakReference<?>> mEmittersById;
 
-    // Some dereference() operations need to be post-poned.
-    private boolean mPostPone;
+    // Some dereferencing operations need to be post-poned.
+    private boolean mPostPoneDereferencing;
     private List<TaskContainer<?>> mPostPonedContainers;
 
     static {
@@ -82,7 +67,7 @@ public class TaskManagerAndroid implements TaskManager
         mContainers = new HashSet<TaskContainer<?>>();
         mEmittersById = new HashMap<TaskEmitterId, WeakReference<?>>();
 
-        mPostPone = false;
+        mPostPoneDereferencing = false;
         mPostPonedContainers = new ArrayList<TaskManagerAndroid.TaskContainer<?>>();
     }
 
@@ -283,7 +268,7 @@ public class TaskManagerAndroid implements TaskManager
      */
     protected void postPoneDereferencing()
     {
-        mPostPone = true;
+        mPostPoneDereferencing = true;
     }
 
     /**
@@ -293,7 +278,7 @@ public class TaskManagerAndroid implements TaskManager
      */
     protected void needDereference(TaskContainer<?> pTaskContainer)
     {
-        if (mPostPone) {
+        if (mPostPoneDereferencing) {
             mPostPonedContainers.add(pTaskContainer);
         } else {
             pTaskContainer.dereferenceEmitter();
@@ -307,7 +292,7 @@ public class TaskManagerAndroid implements TaskManager
      */
     protected void dereferenceContainer(TaskContainer<?> pTaskContainer)
     {
-        mPostPone = false;
+        mPostPoneDereferencing = false;
         for (TaskContainer<?> lContainer : mPostPonedContainers) {
             lContainer.dereferenceEmitter();
         }
