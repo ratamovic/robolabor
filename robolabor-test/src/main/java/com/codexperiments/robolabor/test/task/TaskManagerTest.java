@@ -63,7 +63,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
     protected void setUpOnUIThread() throws Exception
     {
         super.setUpOnUIThread();
-        mTaskManager = new TaskManagerAndroid(new DefaultConfigurationAndroid());
+        mTaskManager = new TaskManagerAndroid(new DefaultConfigurationAndroid(getApplication()));
         getApplicationContext().registerManager(mTaskManager);
     }
 

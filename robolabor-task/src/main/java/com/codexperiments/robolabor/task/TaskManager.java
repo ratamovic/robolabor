@@ -53,9 +53,18 @@ import com.codexperiments.robolabor.task.id.TaskRef;
  * <li><b>Any member variables need by a Task must be copied in Task constructor.</b> That way, the Task can work safely in a
  * closed environment without the interference of other threads. Indeed, don't share any variable between onProcess() and any
  * other threads, UI-Thread included, as this could lead to unpredictable result (because of Thread caching or instruction
- * reordering) unless some synchronization is performed (which can lead to bottleneck or a dead lock if not appropriately
- * handled).</li>
+ * reordering) unless some synchronization is performed (which can lead to bottleneck or a dead lock in extreme case if not
+ * appropriately handled).</li>
  * </ul>
+ * 
+ * During or after processing, several handlers (i.e. callbacks) can be called:
+ * <ul>
+ * <li>onProgress()</li>
+ * <li>onFinish()</li>
+ * <li>onFail()</li>
+ * </ul>
+ * Right before and after these handlers are invoked, emitters are respectively referenced and dereferenced to allow accessing the
+ * outer class. If outer class is not available (e.g. if Activity has been destroyed but not recreated yet).
  */
 public interface TaskManager
 {

@@ -861,7 +861,7 @@ public class TaskManagerAndroid implements TaskManager
 
         /**
          * Configuration option that makes termination handlers crash the application if an uncaught runtime exception occur.
-         * Useful for debugging purpose.
+         * Useful for debugging purpose. Basically, a good strategy is to activate this option when debug mode is activated.
          * 
          * @return True to make application crash or false otherwise.
          */

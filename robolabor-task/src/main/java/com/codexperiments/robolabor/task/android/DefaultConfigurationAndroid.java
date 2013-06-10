@@ -5,6 +5,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
 import android.app.Activity;
+import android.app.Application;
+import android.content.pm.ApplicationInfo;
 
 import com.codexperiments.robolabor.task.Task;
 
@@ -13,12 +15,17 @@ import com.codexperiments.robolabor.task.Task;
  */
 public class DefaultConfigurationAndroid implements TaskManagerAndroid.Configuration
 {
-    private Class<?> mFragmentClass;
-    private Class<?> mFragmentCompatClass;
+    private Application mApplication;
     private ExecutorService mSerialExecutor;
 
-    public DefaultConfigurationAndroid()
+    private Class<?> mFragmentClass;
+    private Class<?> mFragmentCompatClass;
+
+    public DefaultConfigurationAndroid(Application pApplication)
     {
+        mApplication = pApplication;
+        mSerialExecutor = createExecutors();
+
         ClassLoader lClassLoader = getClass().getClassLoader();
         try {
             mFragmentClass = Class.forName("android.app.Fragment", false, lClassLoader);
@@ -30,7 +37,6 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.Configura
         } catch (ClassNotFoundException eClassNotFoundException) {
             // Current application doesn't embed compatibility library.
         }
-        mSerialExecutor = createExecutors();
     }
 
     /**
@@ -136,6 +142,6 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.Configura
     @Override
     public boolean crashOnHandlerFailure()
     {
-        return false;
+        return (mApplication.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
     }
 }
