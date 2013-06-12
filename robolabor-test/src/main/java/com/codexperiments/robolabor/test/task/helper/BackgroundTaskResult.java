@@ -90,7 +90,7 @@ public class BackgroundTaskResult implements TaskResult<Integer>
         return mTaskRef;
     }
 
-    public void setTaskId(TaskRef<Integer> pTaskRef)
+    public void setTaskRef(TaskRef<Integer> pTaskRef)
     {
         mTaskRef = pTaskRef;
     }

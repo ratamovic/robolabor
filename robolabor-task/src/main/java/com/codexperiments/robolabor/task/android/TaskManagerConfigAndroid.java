@@ -9,11 +9,12 @@ import android.app.Application;
 import android.content.pm.ApplicationInfo;
 
 import com.codexperiments.robolabor.task.Task;
+import com.codexperiments.robolabor.task.TaskManagerConfig;
 
 /**
  * Example configuration that handles basic Android components: Activity and Fragments.
  */
-public class DefaultConfigurationAndroid implements TaskManagerAndroid.Configuration
+public class TaskManagerConfigAndroid implements TaskManagerConfig
 {
     private Application mApplication;
     private ExecutorService mSerialExecutor;
@@ -21,7 +22,7 @@ public class DefaultConfigurationAndroid implements TaskManagerAndroid.Configura
     private Class<?> mFragmentClass;
     private Class<?> mFragmentCompatClass;
 
-    public DefaultConfigurationAndroid(Application pApplication)
+    public TaskManagerConfigAndroid(Application pApplication)
     {
         mApplication = pApplication;
         mSerialExecutor = createExecutors();

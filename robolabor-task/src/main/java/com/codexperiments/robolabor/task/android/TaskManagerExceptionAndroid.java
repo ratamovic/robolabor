@@ -1,26 +1,15 @@
 package com.codexperiments.robolabor.task.android;
 
 import com.codexperiments.robolabor.task.Task;
+import com.codexperiments.robolabor.task.TaskManagerException;
 import com.codexperiments.robolabor.task.TaskResult;
 
 /**
  * Indicates a case that should never happen and which indicates a programming or configuration error (e.g. a reflection call
  * which fails), a default case that should never happen in a switch, etc.
  */
-public class TaskManagerException extends RuntimeException
+public class TaskManagerExceptionAndroid
 {
-    private static final long serialVersionUID = -4615749565432900659L;
-
-    protected TaskManagerException(String pMessage, Object... pArguments)
-    {
-        super(String.format(pMessage, pArguments));
-    }
-
-    protected TaskManagerException(Throwable pThrowable, String pMessage, Object... pArguments)
-    {
-        super(String.format(pMessage, pArguments), pThrowable);
-    }
-
     public static TaskManagerException emitterIdCouldNotBeDetermined(TaskResult<?> pTask)
     {
         return new TaskManagerException("Invalid task %1$s : Emitter Id couldn't be bound.", pTask);

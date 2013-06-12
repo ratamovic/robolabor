@@ -21,7 +21,7 @@
         <activity
             android:name="com.codexperiments.robolabor.test.task.helper.TaskActivity"
             android:label="@string/app_name" />
-        <service android:name="com.codexperiments.robolabor.task.android.TaskManagerService" />
+        <service android:name="com.codexperiments.robolabor.task.android.TaskManagerServiceAndroid" />
     </application>
 
     <instrumentation
