@@ -4,9 +4,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.Application;
 import android.content.pm.ApplicationInfo;
+import android.os.Build;
+import android.text.TextUtils;
 
 import com.codexperiments.robolabor.task.TaskManagerConfig;
 import com.codexperiments.robolabor.task.handler.Task;
@@ -91,11 +94,12 @@ public class TaskManagerConfigAndroid implements TaskManagerConfig
      * @param pFragment Fragment to find the Id of.
      * @return Fragment Id if not 0, Fragment Tag if not empty or else its Fragment class.
      */
+    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
     protected Object resolveFragmentId(android.app.Fragment pFragment)
     {
         if (pFragment.getId() > 0) {
             return pFragment.getId();
-        } else if (pFragment.getTag() != null && !pFragment.getTag().isEmpty()) {
+        } else if (pFragment.getTag() != null && !TextUtils.isEmpty(pFragment.getTag())) {
             return pFragment.getTag();
         } else {
             return pFragment.getClass();
@@ -109,7 +113,7 @@ public class TaskManagerConfigAndroid implements TaskManagerConfig
     {
         if (pFragment.getId() > 0) {
             return pFragment.getId();
-        } else if (pFragment.getTag() != null && !pFragment.getTag().isEmpty()) {
+        } else if (pFragment.getTag() != null && !TextUtils.isEmpty(pFragment.getTag())) {
             return pFragment.getTag();
         } else {
             return pFragment.getClass();
