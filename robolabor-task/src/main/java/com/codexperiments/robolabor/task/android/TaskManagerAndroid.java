@@ -28,13 +28,15 @@ import com.codexperiments.robolabor.task.handler.TaskResult;
 import com.codexperiments.robolabor.task.id.TaskId;
 
 /**
+ * TODO Remove the need for contextual call.
+ * 
+ * TODO Remove TaskId but create a TaskEquality helper class.
+ * 
  * TODO Handle cancellation.
  * 
  * TODO onBeforeProcess / onRestore / onCommit
  * 
  * TODO Save TaskRefs list.
- * 
- * TODO Move Configuration to an external file.
  */
 public class TaskManagerAndroid implements TaskManager
 {
@@ -115,7 +117,7 @@ public class TaskManagerAndroid implements TaskManager
         // short period of time).
         Object lEmitterId = mConfig.resolveEmitterId(pEmitter);
         if (lEmitterId != null) {
-            TaskEmitterId lTaskEmitterId = new TaskEmitterId(pEmitter.getClass(), lEmitterId); // TODO Cache to avoid an alloc?
+            TaskEmitterId lTaskEmitterId = new TaskEmitterId(pEmitter.getClass(), lEmitterId);
             WeakReference<?> lWeakRef = mEmittersById.get(lTaskEmitterId);
             if ((lWeakRef != null) && (lWeakRef.get() == pEmitter)) {
                 mEmittersById.remove(lTaskEmitterId);
