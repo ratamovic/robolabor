@@ -61,6 +61,11 @@ public class TaskManagerException extends RuntimeException
         return new TaskManagerException("This operation must be called inside a task.");
     }
 
+    public static TaskManagerException serviceNotDeclaredInManifest()
+    {
+        return new TaskManagerException("Service hasn't been declared in manifest file.");
+    }
+
     public static TaskManagerException unmanagedEmittersNotAllowed(Object pEmitter)
     {
         return new TaskManagerException("Unmanaged emitter forbidden by configuration (%1$s).", pEmitter);

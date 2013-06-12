@@ -13,6 +13,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
+import android.app.Application;
+import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -25,21 +27,21 @@ import com.codexperiments.robolabor.task.id.TaskId;
 import com.codexperiments.robolabor.task.id.TaskRef;
 
 /**
- * TODO Explain that Task always dereferenced => If execute from onProcess() then failure if accessing emitter.
- * 
  * TODO Handle cancellation.
  * 
  * TODO onBeforeProcess / onRestore / onCommit
  * 
- * TODO Extends Service?
- * 
  * TODO Save TaskRefs list.
+ * 
+ * TODO Move Configuration to an external file.
  */
 public class TaskManagerAndroid implements TaskManager
 {
     // To generate task references.
     private static int TASK_REF_COUNTER;
 
+    private Application mApplication;
+    private Intent mServiceIntent;
     private Handler mUIQueue;
     private Looper mUILooper;
 
@@ -57,9 +59,12 @@ public class TaskManagerAndroid implements TaskManager
         TASK_REF_COUNTER = Integer.MIN_VALUE;
     }
 
-    public TaskManagerAndroid(Configuration pConfig)
+    public TaskManagerAndroid(Application pApplication, Configuration pConfig)
     {
         super();
+
+        mApplication = pApplication;
+        mServiceIntent = new Intent(mApplication, TaskManagerService.class);
         mUILooper = Looper.getMainLooper();
         mUIQueue = new Handler(mUILooper);
 
@@ -210,6 +215,11 @@ public class TaskManagerAndroid implements TaskManager
             TaskRef<TResult> lTaskRef = lContainer.prepareToRun();
             mContainers.add(lContainer);
             mConfig.resolveExecutor(pTask).execute(lContainer);
+            // Start the (empty) service to tell the system that TaskManager is running and application shouldn't be killed if
+            // possible until all enqueued tasks are running. This is just a suggestion of course...
+            if (mApplication.startService(mServiceIntent) == null) {
+                throw serviceNotDeclaredInManifest();
+            }
             return lTaskRef;
         } else {
             return null;
@@ -259,6 +269,10 @@ public class TaskManagerAndroid implements TaskManager
     protected void notifyFinished(final TaskContainer<?> pContainer)
     {
         mContainers.remove(pContainer);
+        // All enqueued tasks are over. We can stop the (empty) service to tell Android nothing more is running.
+        if (mContainers.isEmpty()) {
+            mApplication.stopService(mServiceIntent);
+        }
     }
 
     /**

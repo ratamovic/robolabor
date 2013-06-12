@@ -14,6 +14,7 @@ import com.codexperiments.robolabor.task.TaskResult;
 import com.codexperiments.robolabor.task.android.DefaultConfigurationAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerException;
+import com.codexperiments.robolabor.task.android.TaskManagerService;
 import com.codexperiments.robolabor.task.id.TaskRef;
 import com.codexperiments.robolabor.test.common.TestCase;
 import com.codexperiments.robolabor.test.task.helper.BackgroundTask;
@@ -63,7 +64,8 @@ public class TaskManagerTest extends TestCase<TaskActivity>
     protected void setUpOnUIThread() throws Exception
     {
         super.setUpOnUIThread();
-        mTaskManager = new TaskManagerAndroid(new DefaultConfigurationAndroid(getApplication()));
+        TaskManagerAndroid.Configuration lConfiguration = new DefaultConfigurationAndroid(getApplication());
+        mTaskManager = new TaskManagerAndroid(getApplication(), lConfiguration);
         getApplicationContext().registerManager(mTaskManager);
     }
 
@@ -400,6 +402,7 @@ public class TaskManagerTest extends TestCase<TaskActivity>
 
     public void testExecute_progress_persisting() throws InterruptedException
     {
+        assertThat(isServiceRunning(TaskManagerService.class), equalTo(false)); // TODO Check service somewhere else.
         TaskActivity lInitialActivity = getActivity(TaskActivity.stepByStep());
         BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
 
@@ -408,16 +411,19 @@ public class TaskManagerTest extends TestCase<TaskActivity>
         assertThat(lTask.awaitProgressExecuted(), equalTo(true));
         assertThat(lTask.getProgressCounter(), equalTo(1));
 
+        assertThat(isServiceRunning(TaskManagerService.class), equalTo(true));
         assertThat(lTask.awaitStepExecuted(), equalTo(true));
         assertThat(lTask.awaitProgressExecuted(), equalTo(true));
         assertThat(lTask.getProgressCounter(), equalTo(2));
 
+        assertThat(isServiceRunning(TaskManagerService.class), equalTo(true));
         assertThat(lTask.awaitStepExecuted(), equalTo(true));
         assertThat(lTask.awaitProgressExecuted(), equalTo(true));
         assertThat(lTask.getProgressCounter(), equalTo(3));
 
         // Finish the task. Since all progress notifications have been processed, no more notifications happen.
         assertThat(lTask.awaitFinished(), equalTo(true));
+        assertThat(isServiceRunning(TaskManagerService.class), equalTo(false));
         assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult));
         assertThat(lInitialActivity.getTaskException(), nullValue());
         assertThat(lTask.getProgressCounter(), equalTo(3));

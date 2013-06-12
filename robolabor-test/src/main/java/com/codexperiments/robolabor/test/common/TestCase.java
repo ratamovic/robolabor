@@ -1,11 +1,15 @@
 package com.codexperiments.robolabor.test.common;
 
-import static java.lang.Thread.sleep;
+import static java.lang.Thread.*;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.app.ActivityManager.RunningServiceInfo;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -127,6 +131,23 @@ public class TestCase<TActivity extends Activity> extends ActivityInstrumentatio
                 }
             });
         }
+    }
+
+    protected boolean isServiceRunning(final Class<?> pServiceClass)
+    {
+        final AtomicBoolean lResult = new AtomicBoolean();
+        getInstrumentation().runOnMainSync(new Runnable() {
+            public void run()
+            {
+                ActivityManager lManager = (ActivityManager) mApplication.getSystemService(Context.ACTIVITY_SERVICE);
+                for (RunningServiceInfo service : lManager.getRunningServices(Integer.MAX_VALUE)) {
+                    if (pServiceClass.getName().equals(service.service.getClassName())) {
+                        lResult.set(true);
+                    }
+                }
+            }
+        });
+        return lResult.get();
     }
 
     public TestApplication getApplication()
