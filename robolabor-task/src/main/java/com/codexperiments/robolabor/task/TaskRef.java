@@ -1,4 +1,4 @@
-package com.codexperiments.robolabor.task.id;
+package com.codexperiments.robolabor.task;
 
 import java.io.Serializable;
 

@@ -17,15 +17,15 @@ import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 
-import com.codexperiments.robolabor.task.Task;
-import com.codexperiments.robolabor.task.TaskIdentifiable;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskManagerConfig;
 import com.codexperiments.robolabor.task.TaskManagerException;
-import com.codexperiments.robolabor.task.TaskProgress;
-import com.codexperiments.robolabor.task.TaskResult;
+import com.codexperiments.robolabor.task.TaskRef;
+import com.codexperiments.robolabor.task.handler.Task;
+import com.codexperiments.robolabor.task.handler.TaskIdentifiable;
+import com.codexperiments.robolabor.task.handler.TaskProgress;
+import com.codexperiments.robolabor.task.handler.TaskResult;
 import com.codexperiments.robolabor.task.id.TaskId;
-import com.codexperiments.robolabor.task.id.TaskRef;
 
 /**
  * TODO Handle cancellation.

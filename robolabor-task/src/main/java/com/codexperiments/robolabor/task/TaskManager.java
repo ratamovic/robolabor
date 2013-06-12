@@ -1,6 +1,9 @@
 package com.codexperiments.robolabor.task;
 
-import com.codexperiments.robolabor.task.id.TaskRef;
+import com.codexperiments.robolabor.task.handler.Task;
+import com.codexperiments.robolabor.task.handler.TaskProgress;
+import com.codexperiments.robolabor.task.handler.TaskResult;
+
 
 /**
  * Terminology:

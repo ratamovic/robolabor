@@ -1,4 +1,4 @@
-package com.codexperiments.robolabor.task;
+package com.codexperiments.robolabor.task.handler;
 
 import com.codexperiments.robolabor.task.id.TaskId;
 

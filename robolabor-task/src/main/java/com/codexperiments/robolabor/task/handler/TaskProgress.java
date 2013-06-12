@@ -1,4 +1,6 @@
-package com.codexperiments.robolabor.task;
+package com.codexperiments.robolabor.task.handler;
+
+import com.codexperiments.robolabor.task.TaskManager;
 
 /**
  * TODO Pass a progression object.

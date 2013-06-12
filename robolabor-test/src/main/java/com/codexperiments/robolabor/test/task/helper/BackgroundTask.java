@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.codexperiments.robolabor.task.TaskManager;
-import com.codexperiments.robolabor.task.id.TaskRef;
+import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.util.ProgressTask;
 
 public class BackgroundTask implements ProgressTask<Integer>

@@ -8,8 +8,8 @@ import android.app.Activity;
 import android.app.Application;
 import android.content.pm.ApplicationInfo;
 
-import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManagerConfig;
+import com.codexperiments.robolabor.task.handler.Task;
 
 /**
  * Example configuration that handles basic Android components: Activity and Fragments.

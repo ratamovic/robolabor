@@ -7,16 +7,16 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import android.test.UiThreadTest;
 
-import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskManagerConfig;
 import com.codexperiments.robolabor.task.TaskManagerException;
-import com.codexperiments.robolabor.task.TaskProgress;
-import com.codexperiments.robolabor.task.TaskResult;
+import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerConfigAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerServiceAndroid;
-import com.codexperiments.robolabor.task.id.TaskRef;
+import com.codexperiments.robolabor.task.handler.Task;
+import com.codexperiments.robolabor.task.handler.TaskProgress;
+import com.codexperiments.robolabor.task.handler.TaskResult;
 import com.codexperiments.robolabor.test.common.TestCase;
 import com.codexperiments.robolabor.test.task.helper.BackgroundTask;
 import com.codexperiments.robolabor.test.task.helper.BackgroundTaskResult;

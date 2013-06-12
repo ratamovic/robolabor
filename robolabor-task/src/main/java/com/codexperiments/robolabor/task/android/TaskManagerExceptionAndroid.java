@@ -1,8 +1,8 @@
 package com.codexperiments.robolabor.task.android;
 
-import com.codexperiments.robolabor.task.Task;
 import com.codexperiments.robolabor.task.TaskManagerException;
-import com.codexperiments.robolabor.task.TaskResult;
+import com.codexperiments.robolabor.task.handler.Task;
+import com.codexperiments.robolabor.task.handler.TaskResult;
 
 /**
  * Indicates a case that should never happen and which indicates a programming or configuration error (e.g. a reflection call

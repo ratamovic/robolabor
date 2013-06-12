@@ -7,8 +7,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 import com.codexperiments.robolabor.task.TaskManager;
-import com.codexperiments.robolabor.task.TaskResult;
-import com.codexperiments.robolabor.task.id.TaskRef;
+import com.codexperiments.robolabor.task.TaskRef;
+import com.codexperiments.robolabor.task.handler.TaskResult;
 
 public class BackgroundTaskResult implements TaskResult<Integer>
 {

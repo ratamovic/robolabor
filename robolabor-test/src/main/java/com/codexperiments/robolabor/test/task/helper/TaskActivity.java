@@ -6,8 +6,8 @@ import android.content.Intent;
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
 
-import com.codexperiments.robolabor.task.TaskIdentifiable;
 import com.codexperiments.robolabor.task.TaskManager;
+import com.codexperiments.robolabor.task.handler.TaskIdentifiable;
 import com.codexperiments.robolabor.task.id.IntTaskId;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.TestApplicationContext;

@@ -2,6 +2,8 @@ package com.codexperiments.robolabor.task;
 
 import java.util.concurrent.ExecutorService;
 
+import com.codexperiments.robolabor.task.handler.Task;
+
 /**
  * Interface that defines how the TaskManager works.
  */

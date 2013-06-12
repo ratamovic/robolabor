@@ -1,4 +1,6 @@
-package com.codexperiments.robolabor.task;
+package com.codexperiments.robolabor.task.handler;
+
+import com.codexperiments.robolabor.task.TaskManager;
 
 public interface Task<TResult> extends TaskResult<TResult>
 {
