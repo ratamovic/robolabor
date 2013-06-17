@@ -4,7 +4,6 @@ import com.codexperiments.robolabor.task.handler.Task;
 import com.codexperiments.robolabor.task.handler.TaskProgress;
 import com.codexperiments.robolabor.task.handler.TaskResult;
 
-
 /**
  * Terminology:
  * 
@@ -79,7 +78,7 @@ public interface TaskManager
 
     <TResult> TaskRef<TResult> execute(Task<TResult> pTask, TaskResult<TResult> pTaskResult);
 
-    <TResult> boolean rebind(TaskRef<TResult> pTaskId, TaskResult<TResult> pTaskResult);
+    <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult);
 
     void notifyProgress(TaskProgress pProgress);
 }

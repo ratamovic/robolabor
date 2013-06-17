@@ -25,6 +25,7 @@ import com.codexperiments.robolabor.task.handler.Task;
 import com.codexperiments.robolabor.task.handler.TaskIdentifiable;
 import com.codexperiments.robolabor.task.handler.TaskProgress;
 import com.codexperiments.robolabor.task.handler.TaskResult;
+import com.codexperiments.robolabor.task.handler.TaskStart;
 import com.codexperiments.robolabor.task.id.TaskId;
 
 /**
@@ -37,6 +38,12 @@ import com.codexperiments.robolabor.task.id.TaskId;
  * TODO onBeforeProcess / onRestore / onCommit
  * 
  * TODO Save TaskRefs list.
+ * 
+ * TODO TaskRef add a Tag
+ * 
+ * TODO Add an onStart() handler.
+ * 
+ * TODO pending(TaskType)
  */
 public class TaskManagerAndroid implements TaskManager
 {
@@ -100,6 +107,8 @@ public class TaskManagerAndroid implements TaskManager
         for (TaskContainer<?> lContainer : mContainers) {
             if (lContainer.finish()) {
                 notifyFinished(lContainer);
+            } else {
+                lContainer.restore(lTaskEmitterId);
             }
         }
     }
@@ -136,7 +145,7 @@ public class TaskManagerAndroid implements TaskManager
     {
         // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
         // considered obsolete). Emitter Id is computed by the configuration strategy. Note that an emitter Id can be null if no
-        // emitter dereferencing should be applied.
+        // dereferencing should be performed.
         Object lEmitterId = mConfig.resolveEmitterId(pEmitter);
         // Emitter id must not be the emitter itself or we have a leak. Warn user about this (tempting) configuration misuse.
         // Note that when we arrive here, pEmitter cannot be null.
@@ -213,16 +222,17 @@ public class TaskManagerAndroid implements TaskManager
         TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, pTaskResult, mConfig, pParentContainer);
         // Remember and run the new task. If an identical task is already executing, do nothing to prevent duplicate tasks.
         if (!mContainers.contains(lContainer)) {
-            // Prepare the task (i.e. cache needed values) before adding it because the first operation can fail (and we don't
-            // want to leave the container list in an incorrect state).
-            TaskRef<TResult> lTaskRef = lContainer.prepareToRun();
-            mContainers.add(lContainer);
-            mConfig.resolveExecutor(pTask).execute(lContainer);
             // Start the (empty) service to tell the system that TaskManager is running and application shouldn't be killed if
             // possible until all enqueued tasks are running. This is just a suggestion of course...
             if (mApplication.startService(mServiceIntent) == null) {
                 throw serviceNotDeclaredInManifest();
             }
+
+            // Prepare the task (i.e. cache needed values) before adding it because the first operation can fail (and we don't
+            // want to leave the container list in an incorrect state).
+            TaskRef<TResult> lTaskRef = lContainer.prepareToRun(false);
+            mContainers.add(lContainer);
+            mConfig.resolveExecutor(pTask).execute(lContainer);
             return lTaskRef;
         } else {
             return null;
@@ -374,9 +384,13 @@ public class TaskManagerAndroid implements TaskManager
         /**
          * Initialize the container (i.e. cache needed values, ...) before running it.
          */
-        protected TaskRef<TResult> prepareToRun()
+        protected TaskRef<TResult> prepareToRun(boolean pIsRestored)
         {
             mEmitterDescriptors.clear();
+            // TODO Reference / Dereference...
+            if (mTaskResult instanceof TaskStart) {
+                ((TaskStart) mTaskResult).onStart(pIsRestored);
+            }
 
             if (mTask != mTaskResult) {
                 prepareTask();
@@ -564,6 +578,33 @@ public class TaskManagerAndroid implements TaskManager
         }
 
         /**
+         * TODO Comments.
+         * 
+         * @param pTaskEmitterId
+         */
+        protected void restore(TaskEmitterId pTaskEmitterId)
+        {
+            if (mTaskResult instanceof TaskStart) {
+                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                    if (lEmitterDescriptor.mEmitterId.equals(pTaskEmitterId)) {
+                        try {
+                            if (referenceEmitter()) {
+                                ((TaskStart) mTaskResult).onStart(true);
+                            }
+                        }
+                        // An exception occurred inside onFail. We can't do much now except committing a suicide or ignoring it.
+                        catch (RuntimeException eRuntimeException) {
+                            if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
+                        } finally {
+                            dereferenceContainer(TaskContainer.this);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
+        /**
          * Replace the previous task handler (usually implemented in the task itself) with a new one. Previous handler is lost.
          * 
          * @param pTaskResult Task handler that must replace previous one.
@@ -574,7 +615,7 @@ public class TaskManagerAndroid implements TaskManager
             mTaskResult = pTaskResult;
             mParentContainer = pParentContainer;
             mProgressRunnable = null;
-            prepareToRun();
+            prepareToRun(true);
         }
 
         /**
@@ -605,6 +646,7 @@ public class TaskManagerAndroid implements TaskManager
             if (!referenceEmitter() && mConfig.keepResultOnHold(mTask)) {
                 // Rollback any modification to leave container in a clean state.
                 dereferenceContainer(this);
+                return false;
             } else {
                 try {
                     postPoneDereferencing();
@@ -624,8 +666,8 @@ public class TaskManagerAndroid implements TaskManager
                     dereferenceContainer(this);
                     mFinished = true;
                 }
+                return true;
             }
-            return true;
         }
 
         @Override

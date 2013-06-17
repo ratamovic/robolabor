@@ -13,7 +13,7 @@ public interface TaskResult<TResult>
      * 
      * @param pTaskManager Use this TaskManager to perform any operation from the handler.
      */
-    void onFinish(TaskManager pTaskManager, TResult pTaskResult);
+    void onFinish(TaskManager pTaskManager, TResult pResult);
 
     /**
      * Handler method called when task computation has failed during execution or in the onFinish() handler. This method is called
@@ -25,5 +25,5 @@ public interface TaskResult<TResult>
      * 
      * @param pTaskManager Use this TaskManager to perform any operation from the handler.
      */
-    void onFail(TaskManager pTaskManager, Throwable pTaskException);
+    void onFail(TaskManager pTaskManager, Throwable pException);
 }
