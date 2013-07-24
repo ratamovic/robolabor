@@ -154,44 +154,6 @@ public class TaskManagerAndroid implements TaskManager {
      * @return Emitter Id
      * @throws TaskManagerException If the emitter isn't managed (managed by configuration but manage() not called yet).
      */
-    // protected TaskEmitterId resolveIds(Object pEmitter) {
-    // // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
-    // // considered obsolete). Emitter Id is computed by the configuration strategy. Note that an emitter Id can be null if no
-    // // dereferencing should be performed.
-    // Object lEmitterId = mConfig.resolveEmitterId(pEmitter);
-    // // Emitter id must not be the emitter itself or we have a leak. Warn user about this (tempting) configuration misuse.
-    // // Note that when we arrive here, pEmitter cannot be null.
-    // if (lEmitterId == pEmitter) throw invalidEmitterId(lEmitterId, pEmitter);
-    //
-    // WeakReference<Object> lEmitterRef = new WeakReference<Object>(pEmitter);
-    // // An unmanaged object doesn't have any Id defined in the configuration, so create a unique one. For unmanaged objects,
-    // // which are unique "by reference", we use the WeakReference itself since it doesn't override Object.equals() (i.e. it is
-    // // unique "by reference" too). This is an optimization that could be perfectly replaced by something like "new Object()".
-    // TaskEmitterId lTaskEmitterId = new TaskEmitterId(pEmitter.getClass(), (lEmitterId != null) ? lEmitterId : lEmitterRef);
-    // // If emitter is managed by the user explicitly and is properly registered in the emitter list, do nothing. User can
-    // // update reference himself through manage(Object).
-    // // If emitter is managed (i.e. emitter Id returned by configuration) but is not in the emitter list, then a call to
-    // // manage() is missing. Throw an exception to warn the user.
-    // // If emitter is not managed by the user explicitly but is already present in the emitter list because another task
-    // // has been executed by the same emitter, do nothing. Indeed unmanaged emitter are unique and never need to be updated.
-    // // If emitter is not managed by the user explicitly but is not present in the emitter list, then start managing it so
-    // // that we will be able to restore its reference later (if it hasn't been garbage collected in-between).
-    // if (mEmittersById.get(lTaskEmitterId) == null) {
-    // // Managed emitter case.
-    // if (lEmitterId != null) {
-    // throw emitterNotManaged(lEmitterId, pEmitter);
-    // }
-    // // Unmanaged emitter case.
-    // else {
-    // if (mConfig.allowUnmanagedEmitters()) {
-    // mEmittersById.put(lTaskEmitterId, lEmitterRef);
-    // } else {
-    // throw unmanagedEmittersNotAllowed(pEmitter);
-    // }
-    // }
-    // }
-    // return lTaskEmitterId;
-    // }
     protected TaskEmitterRef resolveRef(Object pEmitter) {
         // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
         // considered obsolete). Emitter Id is computed by the configuration strategy. Note that an emitter Id can be null if no
@@ -207,29 +169,6 @@ public class TaskManagerAndroid implements TaskManager {
         // unique "by reference" too). This is an optimization that could be perfectly replaced by something like "new Object()".
         TaskEmitterId lEmitterId = new TaskEmitterId(pEmitter.getClass(), (lEmitterIdValue != null) ? lEmitterIdValue
                         : lEmitterRefValue);
-        // TaskEmitterRef lEmitterRef = new TaskEmitterRef(lEmitterId, pEmitter);
-        // // If emitter is managed by the user explicitly and is properly registered in the emitter list, do nothing. User can
-        // // update reference himself through manage(Object).
-        // // If emitter is managed (i.e. emitter Id returned by configuration) but is not in the emitter list, then a call to
-        // // manage() is missing. Throw an exception to warn the user.
-        // // If emitter is not managed by the user explicitly but is already present in the emitter list because another task
-        // // has been executed by the same emitter, do nothing. Indeed unmanaged emitter are unique and never need to be updated.
-        // // If emitter is not managed by the user explicitly but is not present in the emitter list, then start managing it so
-        // // that we will be able to restore its reference later (if it hasn't been garbage collected in-between).
-        // if (!mEmittersById.containsKey(lEmitterId)) {
-        // // Managed emitter case.
-        // if (lEmitterIdValue != null) {
-        // throw emitterNotManaged(lEmitterIdValue, pEmitter);
-        // }
-        // // Unmanaged emitter case.
-        // else {
-        // if (mConfig.allowUnmanagedEmitters()) {
-        // mEmittersById.put(lEmitterId, lEmitterRef);
-        // } else {
-        // throw unmanagedEmittersNotAllowed(pEmitter);
-        // }
-        // }
-        // }
         TaskEmitterRef lEmitterRef = mEmittersById.get(lEmitterId);
         // If emitter is managed by the user explicitly and is properly registered in the emitter list, do nothing. User can
         // update reference himself through manage(Object).
@@ -521,12 +460,15 @@ public class TaskManagerAndroid implements TaskManager {
             }
         }
 
-        protected TaskEmitterRef findCorrespondingRef(Field pField) {
-            TaskEmitterRef lEmitterRef;
-            for (TaskEmitterDescriptor lParentEmitterDescriptor : mEmitterDescriptors) {
-                lEmitterRef = lParentEmitterDescriptor.representSameRef(pField);
-                if (lEmitterRef != null) {
-                    return lEmitterRef;
+        protected TaskEmitterRef findEmitterRefInParentContainers(Field pField) {
+            TaskContainer<?> lParentContainer = mParentContainer;
+            while (lParentContainer != null) {
+                TaskEmitterRef lEmitterRef;
+                for (TaskEmitterDescriptor lParentEmitterDescriptor : mEmitterDescriptors) {
+                    lEmitterRef = lParentEmitterDescriptor.representSameRef(pField);
+                    if (lEmitterRef != null) {
+                        return lEmitterRef;
+                    }
                 }
             }
             return null;
@@ -548,24 +490,10 @@ public class TaskManagerAndroid implements TaskManager {
                 if (lEmitter != null) {
                     lEmitterRef = resolveRef(lEmitter); // new TaskEmitterRef(resolveId(lEmitter), lEmitter);
                 }
-                // If reference is null, that means the emitter is probably used in a parent container and
-                // already managed. Try to find its Id in parent containers.
+                // If reference is null, that means the emitter is probably used in a parent container and already managed.
+                // Try to find its Id in parent containers.
                 else {
-                    TaskContainer<?> lParentContainer = mParentContainer;
-                    while ((lEmitterRef == null) && (lParentContainer != null)) {
-                        // for (TaskEmitterDescriptor lParentEmitterDescriptor : lParentContainer.mEmitterDescriptors) {
-                        // if (pField.getType() == lParentEmitterDescriptor.mEmitterField.getType()) {
-                        // lEmitterRef = lParentEmitterDescriptor.mEmitterRef;
-                        // break;
-                        // }
-                        lEmitterRef = lParentContainer.findCorrespondingRef(pField);
-                        // if (lParentEmitterDescriptor.hasSameRef(pField)) {
-                        // lEmitterRef = lParentEmitterDescriptor.mEmitterRef;
-                        // break;
-                        // }
-                        // }
-                        lParentContainer = lParentContainer.mParentContainer;
-                    }
+                    lEmitterRef = findEmitterRefInParentContainers(pField);
                 }
 
                 if (lEmitterRef != null) {
@@ -589,16 +517,11 @@ public class TaskManagerAndroid implements TaskManager {
          * @return Id of the emitter.
          */
         private void dereferenceEmitter() {
-            // try {
             if (mParentContainer != null) mParentContainer.dereferenceEmitter();
+
             for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
                 lEmitterDescriptor.dereference(mTaskResult); // .mEmitterField.set(mTaskResult, null);
             }
-            // } catch (IllegalArgumentException eIllegalArgumentException) {
-            // throw internalError(eIllegalArgumentException);
-            // } catch (IllegalAccessException eIllegalAccessException) {
-            // throw internalError(eIllegalAccessException);
-            // }
         }
 
         /**
@@ -609,34 +532,14 @@ public class TaskManagerAndroid implements TaskManager {
          *         unmanaged meanwhile.
          */
         private boolean referenceEmitter() {
-            // try {
             // Try to restore emitters in parent containers.
             boolean lRestored = (mParentContainer == null) || mParentContainer.referenceEmitter();
 
             // Restore references for current container.
             for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                // WeakReference<?> lEmitterRef = resolveEmitter(lEmitterDescriptor.mEmitterId);
-                // Object lEmitter = null;
-                // if (lEmitterRef != null) {
-                // lEmitter = lEmitterRef.get();
-                // lEmitterDescriptor.mEmitterField.set(mTaskResult, lEmitter);
-                // }
-                // lRestored &= (lEmitter != null);
-
                 lRestored &= lEmitterDescriptor.reference(mTaskResult);
-                // Object lEmitter = lEmitterDescriptor.get();
-                // if (lEmitter != null) {
-                // lEmitterDescriptor.restore(mTaskResult); // .mEmitterField.set(mTaskResult, lEmitter);
-                // } else {
-                // lRestored = false;
-                // }
             }
             return lRestored;
-            // } catch (IllegalArgumentException eIllegalArgumentException) {
-            // throw internalError(eIllegalArgumentException);
-            // } catch (IllegalAccessException eIllegalAccessException) {
-            // throw internalError(eIllegalAccessException);
-            // }
         }
 
         /**
