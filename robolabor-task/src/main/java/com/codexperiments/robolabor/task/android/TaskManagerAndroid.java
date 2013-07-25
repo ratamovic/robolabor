@@ -310,6 +310,10 @@ public class TaskManagerAndroid implements TaskManager {
         private TaskManagerConfig mConfig;
         private TaskContainer<?> mParentContainer;
         private List<TaskEmitterDescriptor> mEmitterDescriptors;
+        // Counts the number of time a task has been referenced without being dereferenced. A task will be dereferenced only when
+        // this counter reaches 0, which means that no other task needs references to be set. This situation can occur for example
+        // when starting a child task from a parent task callback (e.g. in onFinish()): when the child task is launched, it must
+        // not dereference emitters because the parent task is still in its onFinish() callback and may need references to them.
         private int mReferenceCounter;
 
         // Task result and state.
