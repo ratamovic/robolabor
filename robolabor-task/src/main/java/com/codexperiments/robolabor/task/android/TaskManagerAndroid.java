@@ -58,19 +58,15 @@ public class TaskManagerAndroid implements TaskManager {
     private static int TASK_REF_COUNTER;
 
     private Application mApplication;
-    private Intent mServiceIntent;
     private Handler mUIQueue;
     private Looper mUILooper;
+    private Intent mServiceIntent;
 
     private TaskManagerConfig mConfig;
     // All the current running tasks.
     private Set<TaskContainer<?>> mContainers;
     // Keep tracks of all emitters.
     private Map<TaskEmitterId, TaskEmitterRef> mEmittersById;
-
-    // Some dereferencing operations need to be post-poned.
-    private boolean mPostPoneDereferencing;
-    private List<TaskContainer<?>> mPostPonedContainers;
 
     static {
         TASK_REF_COUNTER = Integer.MIN_VALUE;
@@ -80,16 +76,16 @@ public class TaskManagerAndroid implements TaskManager {
         super();
 
         mApplication = pApplication;
-        mServiceIntent = new Intent(mApplication, TaskManagerServiceAndroid.class);
         mUILooper = Looper.getMainLooper();
         mUIQueue = new Handler(mUILooper);
+        // Because a service is created, the client application dies if the UI-Thread stops for a long time (an ANR). This
+        // shouldn't happen at runtime except when running in Debug mode with a breakpoint placed in the UI-Thread. Thus, service
+        // is disabled in Debug mode. I don't think this is a good idea but for now this is the simplest thing to do.
+        mServiceIntent = new Intent(mApplication, TaskManagerServiceAndroid.class);
 
         mConfig = pConfig;
         mContainers = new HashSet<TaskContainer<?>>();
         mEmittersById = new HashMap<TaskEmitterId, TaskEmitterRef>();
-
-        mPostPoneDereferencing = false;
-        mPostPonedContainers = new ArrayList<TaskManagerAndroid.TaskContainer<?>>();
     }
 
     @Override
@@ -234,7 +230,7 @@ public class TaskManagerAndroid implements TaskManager {
         if (!mContainers.contains(lContainer)) {
             // Start the (empty) service to tell the system that TaskManager is running and application shouldn't be killed if
             // possible until all enqueued tasks are running. This is just a suggestion of course...
-            if (mApplication.startService(mServiceIntent) == null) {
+            if ((mServiceIntent != null) && (mApplication.startService(mServiceIntent) == null)) {
                 throw serviceNotDeclaredInManifest();
             }
 
@@ -290,45 +286,9 @@ public class TaskManagerAndroid implements TaskManager {
     protected void notifyFinished(final TaskContainer<?> pContainer) {
         mContainers.remove(pContainer);
         // All enqueued tasks are over. We can stop the (empty) service to tell Android nothing more is running.
-        if (mContainers.isEmpty()) {
+        if ((mServiceIntent != null) && mContainers.isEmpty()) {
             mApplication.stopService(mServiceIntent);
         }
-    }
-
-    /**
-     * Indicate that dereferencing operations need to be post-poned. Dereferencing can be performed immediately only if task is
-     * not executed from another task, or else the latter, for example, could be dereferenced before it has finished executing its
-     * termination handlers.
-     */
-    protected void postPoneDereferencing() {
-        mPostPoneDereferencing = true;
-    }
-
-    /**
-     * Try to dereference a container immediately if possible but post-pone the operation if necessary.
-     * 
-     * @param pTaskContainer Container to dereference.
-     */
-    protected void needDereference(TaskContainer<?> pTaskContainer) {
-        if (mPostPoneDereferencing) {
-            mPostPonedContainers.add(pTaskContainer);
-        } else {
-            pTaskContainer.dereferenceEmitter();
-        }
-    }
-
-    /**
-     * Immediately dereference the container and any pending dereferencing operations.
-     * 
-     * @param pTaskContainer Container to dereference.
-     */
-    protected void dereferenceContainer(TaskContainer<?> pTaskContainer) {
-        mPostPoneDereferencing = false;
-        for (TaskContainer<?> lContainer : mPostPonedContainers) {
-            lContainer.dereferenceEmitter();
-        }
-        pTaskContainer.dereferenceEmitter();
-        mPostPonedContainers.clear();
     }
 
     /**
@@ -349,6 +309,8 @@ public class TaskManagerAndroid implements TaskManager {
         private TaskId mTaskId;
         private TaskManagerConfig mConfig;
         private TaskContainer<?> mParentContainer;
+        private List<TaskEmitterDescriptor> mEmitterDescriptors;
+        private int mReferenceCounter;
 
         // Task result and state.
         private TResult mResult;
@@ -357,7 +319,6 @@ public class TaskManagerAndroid implements TaskManager {
         private boolean mFinished;
 
         // Cached values.
-        private List<TaskEmitterDescriptor> mEmitterDescriptors;
         private Runnable mProgressRunnable;
 
         public TaskContainer(Task<TResult> pTask,
@@ -373,13 +334,14 @@ public class TaskManagerAndroid implements TaskManager {
             mTaskId = (pTask instanceof TaskIdentifiable) ? ((TaskIdentifiable) pTask).getId() : null;
             mConfig = pConfig;
             mParentContainer = pParentContainer;
+            mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1); // Most of the time, a task will have only one emitter.
+            mReferenceCounter = 0;
 
             mResult = null;
             mThrowable = null;
             mProcessed = false;
             mFinished = false;
 
-            mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1); // Most of the time, a task will have only one emitter.
             mProgressRunnable = null;
         }
 
@@ -387,6 +349,8 @@ public class TaskManagerAndroid implements TaskManager {
          * Initialize the container (i.e. cache needed values, ...) before running it.
          */
         protected TaskRef<TResult> prepareToRun(boolean pIsRestored) {
+            prepareReferenceCounter();
+
             mEmitterDescriptors.clear();
             // TODO Reference / Dereference...
             if (mTaskResult instanceof TaskStart) {
@@ -398,8 +362,17 @@ public class TaskManagerAndroid implements TaskManager {
             }
             prepareTaskResult();
 
-            needDereference(this);
+            dereferenceEmitter();
             return mTaskRef;
+        }
+
+        private void prepareReferenceCounter() {
+            TaskContainer<?> lParentContainer = mParentContainer;
+            while (lParentContainer != null) {
+                ++lParentContainer.mReferenceCounter;
+                lParentContainer = lParentContainer.mParentContainer;
+            }
+            ++mReferenceCounter;
         }
 
         /**
@@ -495,12 +468,13 @@ public class TaskManagerAndroid implements TaskManager {
             TaskContainer<?> lParentContainer = mParentContainer;
             while (lParentContainer != null) {
                 TaskEmitterRef lEmitterRef;
-                for (TaskEmitterDescriptor lParentEmitterDescriptor : mEmitterDescriptors) {
+                for (TaskEmitterDescriptor lParentEmitterDescriptor : lParentContainer.mEmitterDescriptors) {
                     lEmitterRef = lParentEmitterDescriptor.findSameRef(pField);
                     if (lEmitterRef != null) {
                         return lEmitterRef;
                     }
                 }
+                lParentContainer = lParentContainer.mParentContainer;
             }
             return null;
         }
@@ -516,8 +490,10 @@ public class TaskManagerAndroid implements TaskManager {
         private void dereferenceEmitter() {
             if (mParentContainer != null) mParentContainer.dereferenceEmitter();
 
-            for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                lEmitterDescriptor.dereference(mTaskResult); // .mEmitterField.set(mTaskResult, null);
+            if ((--mReferenceCounter) == 0) {
+                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                    lEmitterDescriptor.dereference(mTaskResult);
+                }
             }
         }
 
@@ -533,8 +509,10 @@ public class TaskManagerAndroid implements TaskManager {
             boolean lRestored = (mParentContainer == null) || mParentContainer.referenceEmitter();
 
             // Restore references for current container.
-            for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                lRestored &= lEmitterDescriptor.reference(mTaskResult);
+            if ((mReferenceCounter++) == 0) {
+                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                    lRestored &= lEmitterDescriptor.reference(mTaskResult);
+                }
             }
             return lRestored;
         }
@@ -624,11 +602,10 @@ public class TaskManagerAndroid implements TaskManager {
             // Try to restore the emitter reference. If we can't, ask the configuration what to do.
             if (!referenceEmitter() && mConfig.keepResultOnHold(mTask)) {
                 // Rollback any modification to leave container in a clean state.
-                dereferenceContainer(this);
+                dereferenceEmitter();
                 return false;
             } else {
                 try {
-                    postPoneDereferencing();
                     if (mThrowable == null) {
                         mTaskResult.onFinish(this, mResult);
                     } else {
@@ -642,7 +619,7 @@ public class TaskManagerAndroid implements TaskManager {
                     // After task is over, it may still get dereferenced (e.g. if a child task gets executed). So dereference it
                     // immediately to leave it in a clean state. This will ease potential NullPointerException detection (e.g. if
                     // an inner task is executed from termination handler of another task).
-                    dereferenceContainer(this);
+                    dereferenceEmitter();
                     mFinished = true;
                 }
                 return true;
@@ -688,7 +665,6 @@ public class TaskManagerAndroid implements TaskManager {
                 lProgressRunnable = new Runnable() {
                     public void run() {
                         try {
-                            postPoneDereferencing();
                             if (referenceEmitter()) {
                                 pTaskProgress.onProgress(TaskManagerAndroid.this);
                             }
@@ -697,7 +673,7 @@ public class TaskManagerAndroid implements TaskManager {
                         catch (RuntimeException eRuntimeException) {
                             if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
                         } finally {
-                            dereferenceContainer(TaskContainer.this);
+                            dereferenceEmitter();
                         }
                     }
                 };

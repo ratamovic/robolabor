@@ -1,7 +1,10 @@
 package com.codexperiments.robolabor.test.task.helper;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.CoreMatchers.nullValue;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
 
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
@@ -13,8 +16,7 @@ import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.util.ProgressTask;
 
-public class BackgroundTask implements ProgressTask<Integer>
-{
+public class BackgroundTask implements ProgressTask<Integer> {
     public static final int TASK_STEP_COUNT = 5;
     public static final int TASK_STEP_DURATION_MS = 1000;
     // At least one test must wait until this delay has ended. So please avoid increasing it except for debugging purpose.
@@ -37,20 +39,17 @@ public class BackgroundTask implements ProgressTask<Integer>
     private CountDownLatch mTaskStepEnd;
     private CountDownLatch mTaskFinished;
 
-    public BackgroundTask(Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep)
-    {
+    public BackgroundTask(Integer pTaskResult, Boolean pCheckEmitterNull, boolean pStepByStep) {
         this(pTaskResult, null, pCheckEmitterNull, pStepByStep);
 
     }
 
-    public BackgroundTask(Exception pTaskException, Boolean pCheckEmitterNull, boolean pStepByStep)
-    {
+    public BackgroundTask(Exception pTaskException, Boolean pCheckEmitterNull, boolean pStepByStep) {
         this(null, pTaskException, pCheckEmitterNull, pStepByStep);
 
     }
 
-    public BackgroundTask(Integer pTaskResult, Exception pTaskException, Boolean pCheckEmitterNull, boolean pStepByStep)
-    {
+    public BackgroundTask(Integer pTaskResult, Exception pTaskException, Boolean pCheckEmitterNull, boolean pStepByStep) {
         super();
 
         mCheckEmitterNull = pCheckEmitterNull;
@@ -70,8 +69,7 @@ public class BackgroundTask implements ProgressTask<Integer>
     }
 
     @Override
-    public Integer onProcess(TaskManager pTaskManager) throws Exception
-    {
+    public Integer onProcess(TaskManager pTaskManager) throws Exception {
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure task is executed only once.
         // We have two cases here: either we loop until step by step is over or until we have performed all iterations.
         // We know that we are in step by step mode if mStepByStep is true at the beginning of the loop.
@@ -93,8 +91,7 @@ public class BackgroundTask implements ProgressTask<Integer>
     }
 
     @Override
-    public void onProgress(TaskManager pTaskManager)
-    {
+    public void onProgress(TaskManager pTaskManager) {
         ++mProgressCounter;
         if (mTaskStepProgress != null) {
             mTaskStepProgress.countDown();
@@ -102,8 +99,7 @@ public class BackgroundTask implements ProgressTask<Integer>
     }
 
     @Override
-    public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
-    {
+    public void onFinish(TaskManager pTaskManager, Integer pTaskResult) {
         // Check if outer object reference has been restored (or not).
         if (mCheckEmitterNull != null) {
             if (mCheckEmitterNull) {
@@ -121,15 +117,13 @@ public class BackgroundTask implements ProgressTask<Integer>
     }
 
     @Override
-    public void onFail(TaskManager pTaskManager, Throwable pTaskException)
-    {
+    public void onFail(TaskManager pTaskManager, Throwable pTaskException) {
         mTaskException = pTaskException;
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure termination handler is executed only once.
         mTaskFinished.countDown();
     }
 
-    private void awaitStart()
-    {
+    private void awaitStart() {
         if (mTaskStepStart != null) {
             try {
                 mTaskStepStart.await(TASK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -148,8 +142,7 @@ public class BackgroundTask implements ProgressTask<Integer>
         }
     }
 
-    private void notifyEnded()
-    {
+    private void notifyEnded() {
         if (mTaskStepStart != null) {
             mTaskStepEnd.countDown();
         }
@@ -158,8 +151,7 @@ public class BackgroundTask implements ProgressTask<Integer>
     /**
      * Works in step by step mode only.
      */
-    public boolean awaitStepExecuted()
-    {
+    public boolean awaitStepExecuted() {
         if (mTaskStepStart == null) return false;
 
         try {
@@ -181,8 +173,7 @@ public class BackgroundTask implements ProgressTask<Integer>
     /**
      * Works in step by step mode only.
      */
-    public boolean awaitFinished()
-    {
+    public boolean awaitFinished() {
         try {
             mAwaitFinished = true;
             if (mTaskStepStart != null) {
@@ -205,8 +196,7 @@ public class BackgroundTask implements ProgressTask<Integer>
      * progress is expected (and only these ones)! Always execute it after awaitStepExecuted() or after awaitStepFinished() to
      * avoid getting stuck...
      */
-    public boolean awaitProgressExecuted()
-    {
+    public boolean awaitProgressExecuted() {
         try {
             boolean lResult = mTaskStepProgress.await(TASK_PROGRESS_TIMEOUT_MS, TimeUnit.MILLISECONDS);
             mTaskStepProgress = new CountDownLatch(1);
@@ -217,48 +207,39 @@ public class BackgroundTask implements ProgressTask<Integer>
         }
     }
 
-    public void reset()
-    {
+    public void reset() {
         mTaskFinished = new CountDownLatch(1);
     }
 
-    public int getStepCounter()
-    {
+    public int getStepCounter() {
         return mStepCounter;
     }
 
-    public int getProgressCounter()
-    {
+    public int getProgressCounter() {
         return mProgressCounter;
     }
 
-    public Integer getTaskResult()
-    {
+    public Integer getTaskResult() {
         return mTaskResult;
     }
 
-    public Throwable getTaskException()
-    {
+    public Throwable getTaskException() {
         return mTaskException;
     }
 
-    protected Boolean getCheckEmitterNull()
-    {
+    protected Boolean getCheckEmitterNull() {
         return mCheckEmitterNull;
     }
 
-    protected Boolean getStepByStep()
-    {
+    protected Boolean getStepByStep() {
         return mStepByStep;
     }
 
-    public TaskRef<Integer> getTaskRef()
-    {
+    public TaskRef<Integer> getTaskRef() {
         return mTaskRef;
     }
 
-    public void setTaskRef(TaskRef<Integer> pTaskRef)
-    {
+    public void setTaskRef(TaskRef<Integer> pTaskRef) {
         mTaskRef = pTaskRef;
     }
 
@@ -267,14 +248,12 @@ public class BackgroundTask implements ProgressTask<Integer>
      * 
      * @return Task emitter (i.e. the outer class containing the task).
      */
-    public Object getEmitter()
-    {
+    public Object getEmitter() {
         return null;
     }
 
     @Override
-    public String toString()
-    {
+    public String toString() {
         return "BackgroundTask [mTaskResult=" + mTaskResult + ", mTaskException=" + mTaskException + ", mStepCounter="
                         + mStepCounter + ", mProgressCounter=" + mProgressCounter + "]";
     }
