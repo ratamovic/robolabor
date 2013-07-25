@@ -106,8 +106,7 @@ public class TaskManagerAndroid implements TaskManager {
         TaskEmitterId lEmitterId = new TaskEmitterId(pEmitter.getClass(), lEmitterIdValue);
         TaskEmitterRef lEmitterRef = mEmittersById.get(lEmitterId);
         if (lEmitterRef == null) {
-            lEmitterRef = new TaskEmitterRef(lEmitterId, pEmitter);
-            mEmittersById.put(lEmitterId, lEmitterRef);
+            lEmitterRef = mEmittersById.put(lEmitterId, new TaskEmitterRef(lEmitterId, pEmitter));
         } else {
             lEmitterRef.set(pEmitter);
         }
@@ -149,6 +148,7 @@ public class TaskManagerAndroid implements TaskManager {
      * @return Emitter Id
      * @throws TaskManagerException If the emitter isn't managed (managed by configuration but manage() not called yet).
      */
+    // TODO Sync
     protected TaskEmitterRef resolveRef(Object pEmitter) {
         // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
         // considered obsolete). Emitter Id is computed by the configuration strategy. Note that an emitter Id can be null if no
@@ -289,6 +289,7 @@ public class TaskManagerAndroid implements TaskManager {
      * 
      * @param pContainer Finished task container.
      */
+    // TODO Sync
     protected void notifyFinished(final TaskContainer<?> pContainer) {
         mContainers.remove(pContainer);
         // All enqueued tasks are over. We can stop the (empty) service to tell Android nothing more is running.
@@ -316,7 +317,7 @@ public class TaskManagerAndroid implements TaskManager {
         private TaskScheduler mScheduler;
         private TaskManagerConfig mConfig;
         private TaskContainer<?> mParentContainer;
-        private List<TaskEmitterDescriptor> mEmitterDescriptors;
+        private List<TaskEmitterDescriptor> mEmitterDescriptors; // TODO Sync
         // Counts the number of time a task has been referenced without being dereferenced. A task will be dereferenced only when
         // this counter reaches 0, which means that no other task needs references to be set. This situation can occur for example
         // when starting a child task from a parent task callback (e.g. in onFinish()): when the child task is launched, it must
@@ -361,6 +362,7 @@ public class TaskManagerAndroid implements TaskManager {
         /**
          * Initialize the container (i.e. cache needed values, ...) before running it.
          */
+        // TODO Sync
         protected TaskRef<TResult> prepareToRun(boolean pIsRestored) {
             prepareReferenceCounter();
 
@@ -379,6 +381,8 @@ public class TaskManagerAndroid implements TaskManager {
             return mTaskRef;
         }
 
+        // TODO Sync
+        // TODO Comments
         private void prepareReferenceCounter() {
             TaskContainer<?> lParentContainer = mParentContainer;
             while (lParentContainer != null) {
@@ -500,6 +504,7 @@ public class TaskManagerAndroid implements TaskManager {
          * @param pTask Task to dereference.
          * @return Id of the emitter.
          */
+        // TODO Sync
         private void dereferenceEmitter() {
             if (mParentContainer != null) mParentContainer.dereferenceEmitter();
 
@@ -517,6 +522,7 @@ public class TaskManagerAndroid implements TaskManager {
          * @return True if restoration could be performed properly. This may be false if a previously managed object become
          *         unmanaged meanwhile.
          */
+        // TODO Sync
         private boolean referenceEmitter() {
             // Try to restore emitters in parent containers.
             boolean lRestored = (mParentContainer == null) || mParentContainer.referenceEmitter();
