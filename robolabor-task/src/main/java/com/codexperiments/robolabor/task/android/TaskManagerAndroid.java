@@ -58,8 +58,9 @@ public class TaskManagerAndroid implements TaskManager {
     private static int TASK_REF_COUNTER;
 
     private Application mApplication;
-    private Handler mUIQueue;
-    private Looper mUILooper;
+    private TaskScheduler mUIScheduler;
+    // private Handler mUIQueue;
+    // private Looper mUILooper;
     private Intent mServiceIntent;
 
     private TaskManagerConfig mConfig;
@@ -76,8 +77,9 @@ public class TaskManagerAndroid implements TaskManager {
         super();
 
         mApplication = pApplication;
-        mUILooper = Looper.getMainLooper();
-        mUIQueue = new Handler(mUILooper);
+        // mUILooper = Looper.getMainLooper();
+        // mUIQueue = new Handler(mUILooper);
+        mUIScheduler = new TaskScheduler();
         // Because a service is created, the client application dies if the UI-Thread stops for a long time (an ANR). This
         // shouldn't happen at runtime except when running in Debug mode with a breakpoint placed in the UI-Thread. Thus, service
         // is disabled in Debug mode. I don't think this is a good idea but for now this is the simplest thing to do.
@@ -90,8 +92,8 @@ public class TaskManagerAndroid implements TaskManager {
 
     @Override
     public void manage(Object pEmitter) {
-        if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
         if (pEmitter == null) throw new NullPointerException("Emitter is null");
+        mUIScheduler.checkCurrentThread();
 
         // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
         // considered obsolete). Emitter Id is computed by the configuration strategy. Note that an emitter Id can be null if no
@@ -123,7 +125,7 @@ public class TaskManagerAndroid implements TaskManager {
     @Override
     public void unmanage(Object pEmitter) {
         if (pEmitter == null) throw new NullPointerException("Emitter is null");
-        if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
+        mUIScheduler.checkCurrentThread();
 
         // Remove an existing task emitter. If the emitter reference (in Java terms) is different from the object to remove, then
         // don't do anything. This could occur if a new object is managed before an older one with the same Id is unmanaged.
@@ -209,7 +211,7 @@ public class TaskManagerAndroid implements TaskManager {
 
     @Override
     public <TResult> TaskRef<TResult> execute(Task<TResult> pTask) {
-        if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
+        mUIScheduler.checkCurrentThread();
         return execute(pTask, pTask, null);
     }
 
@@ -225,7 +227,11 @@ public class TaskManagerAndroid implements TaskManager {
         if (pTask == null) throw new NullPointerException("Task is null");
 
         // Create a container to run the task.
-        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, pTaskResult, mConfig, pParentContainer);
+        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask,
+                                                                       pTaskResult,
+                                                                       mUIScheduler,
+                                                                       mConfig,
+                                                                       pParentContainer);
         // Remember and run the new task. If an identical task is already executing, do nothing to prevent duplicate tasks.
         if (!mContainers.contains(lContainer)) {
             // Start the (empty) service to tell the system that TaskManager is running and application shouldn't be killed if
@@ -247,7 +253,7 @@ public class TaskManagerAndroid implements TaskManager {
 
     @Override
     public <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult) {
-        if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
+        mUIScheduler.checkCurrentThread();
         return rebind(pTaskRef, pTaskResult, null);
     }
 
@@ -307,6 +313,7 @@ public class TaskManagerAndroid implements TaskManager {
         // Container info.
         private TaskRef<TResult> mTaskRef;
         private TaskId mTaskId;
+        private TaskScheduler mScheduler;
         private TaskManagerConfig mConfig;
         private TaskContainer<?> mParentContainer;
         private List<TaskEmitterDescriptor> mEmitterDescriptors;
@@ -327,6 +334,7 @@ public class TaskManagerAndroid implements TaskManager {
 
         public TaskContainer(Task<TResult> pTask,
                              TaskResult<TResult> pTaskResult,
+                             TaskScheduler pScheduler,
                              TaskManagerConfig pConfig,
                              TaskContainer<?> pParentContainer)
         {
@@ -336,6 +344,7 @@ public class TaskManagerAndroid implements TaskManager {
 
             mTaskRef = new TaskRef<TResult>(TASK_REF_COUNTER++);
             mTaskId = (pTask instanceof TaskIdentifiable) ? ((TaskIdentifiable) pTask).getId() : null;
+            mScheduler = pScheduler;
             mConfig = pConfig;
             mParentContainer = pParentContainer;
             mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1); // Most of the time, a task will have only one emitter.
@@ -530,7 +539,7 @@ public class TaskManagerAndroid implements TaskManager {
             } catch (final Exception eException) {
                 mThrowable = eException;
             } finally {
-                mUIQueue.post(new Runnable() {
+                mScheduler.scheduleCallback(new Runnable() {
                     public void run() {
                         mProcessed = true;
                         if (finish()) {
@@ -670,7 +679,7 @@ public class TaskManagerAndroid implements TaskManager {
                     public void run() {
                         try {
                             if (referenceEmitter()) {
-                                pTaskProgress.onProgress(TaskManagerAndroid.this);
+                                pTaskProgress.onProgress(TaskContainer.this);
                             }
                         }
                         // An exception occurred inside onFail. We can't do much now except committing a suicide or ignoring it.
@@ -687,7 +696,7 @@ public class TaskManagerAndroid implements TaskManager {
 
             // Progress is always executed on the UI-Thread but sent from a non-UI-Thread (except if called from onFinish() or
             // onFail() but that shouldn't occur often).
-            mUIQueue.post(lProgressRunnable);
+            mScheduler.scheduleCallback(lProgressRunnable);
         }
 
         public boolean hasSameRef(TaskRef<?> pTaskRef) {
@@ -724,6 +733,27 @@ public class TaskManagerAndroid implements TaskManager {
             } else {
                 throw internalError();
             }
+        }
+    }
+
+    private static class TaskScheduler {
+        private Handler mUIQueue;
+        private Looper mUILooper;
+
+        public TaskScheduler() {
+            super();
+            mUILooper = Looper.getMainLooper();
+            mUIQueue = new Handler(mUILooper);
+        }
+
+        public void checkCurrentThread() {
+            if (Looper.myLooper() != mUILooper) {
+                throw mustBeExecutedFromUIThread();
+            }
+        }
+
+        public void scheduleCallback(Runnable pCallbackRunnable) {
+            mUIQueue.post(pCallbackRunnable);
         }
     }
 
