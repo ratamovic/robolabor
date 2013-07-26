@@ -58,7 +58,7 @@ public class TaskManagerAndroid implements TaskManager {
     private static int TASK_REF_COUNTER;
 
     private Application mApplication;
-    private TaskScheduler mUIScheduler;
+    private TaskScheduler mDefaultScheduler;
     // private Handler mUIQueue;
     // private Looper mUILooper;
     private Intent mServiceIntent;
@@ -79,7 +79,7 @@ public class TaskManagerAndroid implements TaskManager {
         mApplication = pApplication;
         // mUILooper = Looper.getMainLooper();
         // mUIQueue = new Handler(mUILooper);
-        mUIScheduler = new TaskScheduler();
+        mDefaultScheduler = new TaskScheduler();
         // Because a service is created, the client application dies if the UI-Thread stops for a long time (an ANR). This
         // shouldn't happen at runtime except when running in Debug mode with a breakpoint placed in the UI-Thread. Thus, service
         // is disabled in Debug mode. I don't think this is a good idea but for now this is the simplest thing to do.
@@ -93,7 +93,7 @@ public class TaskManagerAndroid implements TaskManager {
     @Override
     public void manage(Object pEmitter) {
         if (pEmitter == null) throw new NullPointerException("Emitter is null");
-        mUIScheduler.checkCurrentThread();
+        mDefaultScheduler.checkCurrentThread();
 
         // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
         // considered obsolete). Emitter Id is computed by the configuration strategy. Note that an emitter Id can be null if no
@@ -113,9 +113,7 @@ public class TaskManagerAndroid implements TaskManager {
 
         // Try to terminate any task we can, which is possible if the new registered object is one of their emitter.
         for (TaskContainer<?> lContainer : mContainers) {
-            if (lContainer.finish()) {
-                notifyFinished(lContainer);
-            } else {
+            if (!lContainer.finish()) {
                 lContainer.restore(lEmitterId);
             }
         }
@@ -124,7 +122,7 @@ public class TaskManagerAndroid implements TaskManager {
     @Override
     public void unmanage(Object pEmitter) {
         if (pEmitter == null) throw new NullPointerException("Emitter is null");
-        mUIScheduler.checkCurrentThread();
+        mDefaultScheduler.checkCurrentThread();
 
         // Remove an existing task emitter. If the emitter reference (in Java terms) is different from the object to remove, then
         // don't do anything. This could occur if a new object is managed before an older one with the same Id is unmanaged.
@@ -211,7 +209,7 @@ public class TaskManagerAndroid implements TaskManager {
 
     @Override
     public <TResult> TaskRef<TResult> execute(Task<TResult> pTask) {
-        mUIScheduler.checkCurrentThread();
+        mDefaultScheduler.checkCurrentThread();
         return execute(pTask, pTask, null);
     }
 
@@ -229,7 +227,7 @@ public class TaskManagerAndroid implements TaskManager {
         // Create a container to run the task.
         TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask,
                                                                        pTaskResult,
-                                                                       mUIScheduler,
+                                                                       mDefaultScheduler,
                                                                        mConfig,
                                                                        pParentContainer);
         // Remember and run the new task. If an identical task is already executing, do nothing to prevent duplicate tasks.
@@ -253,7 +251,7 @@ public class TaskManagerAndroid implements TaskManager {
 
     @Override
     public <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult) {
-        mUIScheduler.checkCurrentThread();
+        mDefaultScheduler.checkCurrentThread();
         return rebind(pTaskRef, pTaskResult, null);
     }
 
@@ -268,11 +266,9 @@ public class TaskManagerAndroid implements TaskManager {
         for (TaskContainer<?> lContainer : mContainers) {
             if (lContainer.hasSameRef(pTaskRef)) {
                 // Cast safety is guaranteed by the execute() method that returns a properly typed TaskId for the new container.
-                ((TaskContainer<TResult>) lContainer).switchHandler(pTaskResult, pParentContainer);
+                ((TaskContainer<TResult>) lContainer).replaceHandler(pTaskResult, pParentContainer);
                 // If Rebound task is over, execute newly attached handler.
-                if (lContainer.finish()) {
-                    notifyFinished(lContainer);
-                }
+                lContainer.finish();
                 return true;
             }
         }
@@ -317,7 +313,7 @@ public class TaskManagerAndroid implements TaskManager {
         private TaskScheduler mScheduler;
         private TaskManagerConfig mConfig;
         private TaskContainer<?> mParentContainer;
-        private List<TaskEmitterDescriptor> mEmitterDescriptors; // TODO Sync
+        private List<TaskEmitterDescriptor> mEmitterDescriptors;
         // Counts the number of time a task has been referenced without being dereferenced. A task will be dereferenced only when
         // this counter reaches 0, which means that no other task needs references to be set. This situation can occur for example
         // when starting a child task from a parent task callback (e.g. in onFinish()): when the child task is launched, it must
@@ -362,34 +358,23 @@ public class TaskManagerAndroid implements TaskManager {
         /**
          * Initialize the container (i.e. cache needed values, ...) before running it.
          */
-        // TODO Sync
         protected TaskRef<TResult> prepareToRun(boolean pIsRestored) {
             prepareReferenceCounter();
+            try {
+                mEmitterDescriptors.clear();
+                // TODO Reference / Dereference...
+                if (mTaskResult instanceof TaskStart) {
+                    ((TaskStart) mTaskResult).onStart(pIsRestored);
+                }
 
-            mEmitterDescriptors.clear();
-            // TODO Reference / Dereference...
-            if (mTaskResult instanceof TaskStart) {
-                ((TaskStart) mTaskResult).onStart(pIsRestored);
+                if (mTask != mTaskResult) {
+                    prepareTask();
+                }
+                prepareTaskResult();
+            } finally {
+                dereferenceEmitter();
             }
-
-            if (mTask != mTaskResult) {
-                prepareTask();
-            }
-            prepareTaskResult();
-
-            dereferenceEmitter();
             return mTaskRef;
-        }
-
-        // TODO Sync
-        // TODO Comments
-        private void prepareReferenceCounter() {
-            TaskContainer<?> lParentContainer = mParentContainer;
-            while (lParentContainer != null) {
-                ++lParentContainer.mReferenceCounter;
-                lParentContainer = lParentContainer.mParentContainer;
-            }
-            ++mReferenceCounter;
         }
 
         /**
@@ -486,14 +471,22 @@ public class TaskManagerAndroid implements TaskManager {
             while (lParentContainer != null) {
                 TaskEmitterRef lEmitterRef;
                 for (TaskEmitterDescriptor lParentEmitterDescriptor : lParentContainer.mEmitterDescriptors) {
-                    lEmitterRef = lParentEmitterDescriptor.findSameRef(pField);
+                    lEmitterRef = lParentEmitterDescriptor.hasSameType(pField);
                     if (lEmitterRef != null) {
-                        return lEmitterRef;
+                        return lParentEmitterDescriptor.mEmitterRef;
                     }
                 }
                 lParentContainer = lParentContainer.mParentContainer;
             }
             return null;
+        }
+
+        // TODO Comments
+        private void prepareReferenceCounter() {
+            if (mParentContainer != null) mParentContainer.prepareReferenceCounter();
+            synchronized (this) {
+                ++mReferenceCounter;
+            }
         }
 
         /**
@@ -504,13 +497,14 @@ public class TaskManagerAndroid implements TaskManager {
          * @param pTask Task to dereference.
          * @return Id of the emitter.
          */
-        // TODO Sync
         private void dereferenceEmitter() {
             if (mParentContainer != null) mParentContainer.dereferenceEmitter();
 
-            if ((--mReferenceCounter) == 0) {
-                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                    lEmitterDescriptor.dereference(mTaskResult);
+            synchronized (this) {
+                if ((--mReferenceCounter) == 0) {
+                    for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                        lEmitterDescriptor.dereference(mTaskResult);
+                    }
                 }
             }
         }
@@ -522,15 +516,16 @@ public class TaskManagerAndroid implements TaskManager {
          * @return True if restoration could be performed properly. This may be false if a previously managed object become
          *         unmanaged meanwhile.
          */
-        // TODO Sync
         private boolean referenceEmitter() {
             // Try to restore emitters in parent containers.
             boolean lRestored = (mParentContainer == null) || mParentContainer.referenceEmitter();
 
             // Restore references for current container.
-            if ((mReferenceCounter++) == 0) {
-                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                    lRestored &= lEmitterDescriptor.reference(mTaskResult);
+            synchronized (this) {
+                if ((mReferenceCounter++) == 0) {
+                    for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                        lRestored &= lEmitterDescriptor.reference(mTaskResult);
+                    }
                 }
             }
             return lRestored;
@@ -548,9 +543,7 @@ public class TaskManagerAndroid implements TaskManager {
                 mScheduler.scheduleCallback(new Runnable() {
                     public void run() {
                         mProcessed = true;
-                        if (finish()) {
-                            notifyFinished(TaskContainer.this);
-                        }
+                        finish();
                     }
                 });
             }
@@ -562,24 +555,24 @@ public class TaskManagerAndroid implements TaskManager {
          * @param pTaskEmitterId
          */
         protected void restore(TaskEmitterId pTaskEmitterId) {
-            // if (mTaskResult instanceof TaskStart) {
-            // for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-            // if (lEmitterDescriptor.mEmitterId.equals(pTaskEmitterId)) {
-            // try {
-            // if (referenceEmitter()) {
-            // ((TaskStart) mTaskResult).onStart(true);
-            // }
-            // }
-            // // An exception occurred inside onFail. We can't do much now except committing a suicide or ignoring it.
-            // catch (RuntimeException eRuntimeException) {
-            // if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
-            // } finally {
-            // dereferenceContainer(TaskContainer.this);
-            // }
-            // return;
-            // }
-            // }
-            // }
+            if (mTaskResult instanceof TaskStart) {
+                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                    if (lEmitterDescriptor.hasSameId(pTaskEmitterId)) {
+                        try {
+                            if (referenceEmitter()) {
+                                ((TaskStart) mTaskResult).onStart(true);
+                            }
+                        }
+                        // An exception occurred inside onFail. We can't do much now except committing a suicide or ignoring it.
+                        catch (RuntimeException eRuntimeException) {
+                            if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
+                        } finally {
+                            dereferenceEmitter();
+                        }
+                        return;
+                    }
+                }
+            }
         }
 
         /**
@@ -588,7 +581,7 @@ public class TaskManagerAndroid implements TaskManager {
          * @param pTaskResult Task handler that must replace previous one.
          * @param pParentContainer Context in which the task handler is executed.
          */
-        protected void switchHandler(TaskResult<TResult> pTaskResult, TaskContainer<?> pParentContainer) {
+        protected void replaceHandler(TaskResult<TResult> pTaskResult, TaskContainer<?> pParentContainer) {
             mTaskResult = pTaskResult;
             mParentContainer = pParentContainer;
             mProgressRunnable = null;
@@ -619,29 +612,32 @@ public class TaskManagerAndroid implements TaskManager {
             // Execute task termination handlers if they have not been yet (but only if the task has been fully processed).
             if (!mProcessed || mFinished) return false;
             // Try to restore the emitter reference. If we can't, ask the configuration what to do.
-            if (!referenceEmitter() && mConfig.keepResultOnHold(mTask)) {
-                // Rollback any modification to leave container in a clean state.
-                dereferenceEmitter();
-                return false;
-            } else {
-                try {
-                    if (mThrowable == null) {
-                        mTaskResult.onFinish(this, mResult);
-                    } else {
-                        mTaskResult.onFail(this, mThrowable);
+            try {
+                if (!referenceEmitter() && mConfig.keepResultOnHold(mTask)) {
+                    // Finally block will rollback any modification to leave container in a clean state.
+                    return false;
+                } else {
+                    try {
+                        if (mThrowable == null) {
+                            mTaskResult.onFinish(this, mResult);
+                        } else {
+                            mTaskResult.onFail(this, mThrowable);
+                        }
                     }
+                    // An exception occurred inside onFail. We can't do much now except committing a suicide or ignoring it.
+                    catch (RuntimeException eRuntimeException) {
+                        if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
+                    } finally {
+                        notifyFinished(this);
+                        mFinished = true;
+                    }
+                    return true;
                 }
-                // An exception occurred inside onFail. We can't do much now except committing a suicide or ignoring it.
-                catch (RuntimeException eRuntimeException) {
-                    if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
-                } finally {
-                    // After task is over, it may still get dereferenced (e.g. if a child task gets executed). So dereference it
-                    // immediately to leave it in a clean state. This will ease potential NullPointerException detection (e.g. if
-                    // an inner task is executed from termination handler of another task).
-                    dereferenceEmitter();
-                    mFinished = true;
-                }
-                return true;
+            } finally {
+                // After task is over, it may still get dereferenced (e.g. if a child task gets executed). So dereference it
+                // immediately to leave it in a clean state. This will ease potential NullPointerException detection (e.g. if
+                // an inner task is executed from termination handler of another task).
+                dereferenceEmitter();
             }
         }
 
@@ -775,7 +771,11 @@ public class TaskManagerAndroid implements TaskManager {
             mEmitterRef = pEmitterRef;
         }
 
-        public TaskEmitterRef findSameRef(Field pField) {
+        public boolean hasSameId(TaskEmitterId pTaskEmitterId) {
+            return mEmitterRef.hasSameId(pTaskEmitterId);
+        }
+
+        public TaskEmitterRef hasSameType(Field pField) {
             return (pField.getType() == mEmitterField.getType()) ? mEmitterRef : null;
         }
 
@@ -821,6 +821,10 @@ public class TaskManagerAndroid implements TaskManager {
         public TaskEmitterRef(TaskEmitterId pEmitterId, Object pEmitterValue) {
             mEmitterId = pEmitterId;
             set(pEmitterValue);
+        }
+
+        public boolean hasSameId(TaskEmitterId pTaskEmitterId) {
+            return mEmitterId.equals(pTaskEmitterId);
         }
 
         public Object get() {
