@@ -233,9 +233,11 @@ public class TaskActivity extends FragmentActivity {
 
     public class HierarchicalTask extends InnerTask {
         private BackgroundTask mInnerTask;
+        private TaskManager mTaskManager; // TODO Fix
 
         public HierarchicalTask(final Integer pTaskResult, final Boolean pCheckEmitterNull, final boolean pStepByStep) {
             super(pTaskResult, pCheckEmitterNull, pStepByStep);
+            mTaskManager = TaskActivity.this.mTaskManager; // TODO Fix
         }
 
         @Override
@@ -302,12 +304,14 @@ public class TaskActivity extends FragmentActivity {
 
     public class HierarchicalTask_CorruptionBug extends InnerTask {
         private BackgroundTask mBackgroundTask2;
+        private TaskManager mTaskManager; // TODO Fix
 
         public HierarchicalTask_CorruptionBug(final Integer pTaskResult,
                                               final Boolean pCheckEmitterNull,
                                               final boolean pStepByStep)
         {
             super(pTaskResult, pCheckEmitterNull, pStepByStep);
+            mTaskManager = TaskActivity.this.mTaskManager; // TODO Fix
             mBackgroundTask2 = new InnerTask(pTaskResult + 1, pCheckEmitterNull, pStepByStep) {
                 @Override
                 public void onFinish(Integer pTaskResult) {

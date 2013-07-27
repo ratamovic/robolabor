@@ -214,7 +214,6 @@ public class TaskManagerAndroid implements TaskManager {
 
     @Override
     public <TResult> TaskRef<TResult> execute(Task<TResult> pTask) {
-        mDefaultScheduler.checkCurrentThread();
         return execute(pTask, pTask/* , null */);
     }
 
@@ -229,6 +228,7 @@ public class TaskManagerAndroid implements TaskManager {
                                                                                                    * pParentContainers
                                                                                                    */) {
         if (pTask == null) throw new NullPointerException("Task is null");
+        mDefaultScheduler.checkCurrentThread();
 
         // Create a container to run the task.
         TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, pTaskResult, mDefaultScheduler, mConfig);
@@ -264,6 +264,7 @@ public class TaskManagerAndroid implements TaskManager {
                                                                                                */) {
         if (pTaskRef == null) throw new NullPointerException("Task is null");
         if (pTaskResult == null) throw new NullPointerException("TaskResult is null");
+        mDefaultScheduler.checkCurrentThread();
 
         for (TaskContainer<?> lContainer : mContainers) {
             if (lContainer.hasSameRef(pTaskRef)) {
@@ -584,11 +585,19 @@ public class TaskManagerAndroid implements TaskManager {
             // }
             // }
             TaskDescriptor<TResult> lDescriptor = null;
+            boolean deref = false;
             try {
                 synchronized (this) {
                     lDescriptor = mDescriptor;
-                    if (lDescriptor.matchesId(pTaskEmitterId) && !lDescriptor.referenceEmitter()) {
-                        return;
+                    // if (lDescriptor.matchesId(pTaskEmitterId) && !lDescriptor.referenceEmitter()) {
+                    // return;
+                    // // ((TaskStart) mTaskResult).onStart(true);
+                    // }
+                    if (lDescriptor.matchesId(pTaskEmitterId)) {
+                        if (!lDescriptor.referenceEmitter()) {
+                            return;
+                        }
+                        deref = true;
                         // ((TaskStart) mTaskResult).onStart(true);
                     }
                 }
@@ -600,7 +609,7 @@ public class TaskManagerAndroid implements TaskManager {
                 if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
             } finally {
                 synchronized (this) {
-                    lDescriptor.dereferenceEmitter();
+                    if (deref) lDescriptor.dereferenceEmitter();
                 }
             }
         }
@@ -926,7 +935,7 @@ public class TaskManagerAndroid implements TaskManager {
 
     private/* TODO static */final class TaskDescriptor<TResult> {
         private final TaskResult<TResult> mTaskResult;
-        private final List<TaskDescriptor<?>> mParentDescriptors;
+        private final Set<TaskDescriptor<?>> mParentDescriptors;
         private final List<TaskEmitterDescriptor> mEmitterDescriptors;
         // Counts the number of time a task has been referenced without being dereferenced. A task will be dereferenced only when
         // this counter reaches 0, which means that no other task needs references to be set. This situation can occur for example
@@ -936,7 +945,7 @@ public class TaskManagerAndroid implements TaskManager {
 
         public TaskDescriptor(TaskResult<TResult> pTaskResult/* , TaskDescriptor<?> pParentDescriptor */) {
             mTaskResult = pTaskResult;
-            mParentDescriptors = new ArrayList<TaskManagerAndroid.TaskDescriptor<?>>();
+            mParentDescriptors = new HashSet<TaskManagerAndroid.TaskDescriptor<?>>();
             mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1); // Most of the time, a task will have only one emitter.
             mReferenceCounter = 0;
 
@@ -965,11 +974,15 @@ public class TaskManagerAndroid implements TaskManager {
          * Initialize the container (i.e. cache needed values, ...) before running it.
          */
         protected void prepareToRun() {
-            prepareReferenceCounter();
+            // ++mReferenceCounter;
+            // prepareReferenceCounter();
             try {
                 prepareTaskResult();
             } finally {
-                dereferenceEmitter();
+                // dereferenceEmitter();
+                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                    lEmitterDescriptor.dereference(mTaskResult);
+                }
             }
         }
 
@@ -986,7 +999,7 @@ public class TaskManagerAndroid implements TaskManager {
                     // Find emitter references and manage them.
                     for (Field lField : lTaskResultClass.getDeclaredFields()) {
                         if (lField.getName().startsWith("this$")) {
-                            prepareField(lField);
+                            prepareEmitterField(lField);
                             // There should be only one outer reference per "class" in the Task class hierarchy. So we can stop as
                             // soon as the field is found as there won't be another.
                             break;
@@ -1003,7 +1016,7 @@ public class TaskManagerAndroid implements TaskManager {
          * 
          * @param pField Field to manage.
          */
-        private void prepareField(Field pField) {
+        private void prepareEmitterField(Field pField) {
             try {
                 pField.setAccessible(true);
 
@@ -1034,7 +1047,7 @@ public class TaskManagerAndroid implements TaskManager {
         }
 
         private void lookForParentDescriptor(Field pField, Object pEmitter) {
-            if (pField.getType().isAssignableFrom(TaskCallback.class)) {
+            if (TaskCallback.class.isAssignableFrom(pField.getType())) {
                 TaskDescriptor<?> lDescriptor = mCallbackRegister.get(pEmitter);
                 if (lDescriptor != null) {
                     mParentDescriptors.add(lDescriptor);
@@ -1051,6 +1064,7 @@ public class TaskManagerAndroid implements TaskManager {
                             // Find emitter references and manage them.
                             for (Field lField : lTaskResultClass.getDeclaredFields()) {
                                 if (lField.getName().startsWith("this$")) {
+                                    lField.setAccessible(true); // TODO Use only class
                                     Object lParentEmitter = lField.get(pEmitter);
                                     if (lParentEmitter != null) {
                                         lookForParentDescriptor(lField, lParentEmitter);
@@ -1071,7 +1085,7 @@ public class TaskManagerAndroid implements TaskManager {
         }
 
         private TaskEmitterRef findEmitterRefInParentContainers(Field pField) {
-            List<TaskDescriptor<?>> lParentDescriptors = mParentDescriptors;
+            Set<TaskDescriptor<?>> lParentDescriptors = mParentDescriptors;
             if (lParentDescriptors == null) {
                 return null;
             } else {
@@ -1090,14 +1104,14 @@ public class TaskManagerAndroid implements TaskManager {
         }
 
         // TODO Comments
-        private void prepareReferenceCounter() {
-            if (mParentDescriptors != null) {
-                for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
-                    lParentDescriptor.prepareReferenceCounter();
-                }
-            }
-            ++mReferenceCounter;
-        }
+        // private void prepareReferenceCounter() {
+        // if (mParentDescriptors != null) {
+        // for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
+        // lParentDescriptor.prepareReferenceCounter();
+        // }
+        // }
+        // ++mReferenceCounter;
+        // }
 
         /**
          * Dereference the emitter (which is an outer object) from the task (which is an inner class) and return its Id. Emitter
@@ -1131,7 +1145,7 @@ public class TaskManagerAndroid implements TaskManager {
         private boolean referenceEmitter() {
             // Try to restore emitters in parent containers.
             boolean lRestored = true;
-            if (mParentDescriptors != null) {
+            if (mParentDescriptors != null) { // TODO Make null
                 for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
                     lRestored &= lParentDescriptor.referenceEmitter();
                 }
@@ -1228,7 +1242,7 @@ public class TaskManagerAndroid implements TaskManager {
      */
     private static final class TaskEmitterRef {
         private final TaskEmitterId mEmitterId;
-        private WeakReference<?> mEmitterRef;
+        private WeakReference<?> mEmitterRef; // TODO Sync Dont think so...
 
         public TaskEmitterRef(TaskEmitterId pEmitterId, Object pEmitterValue) {
             mEmitterId = pEmitterId;
