@@ -19,6 +19,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import android.app.Application;
 import android.content.Intent;
@@ -30,7 +31,9 @@ import com.codexperiments.robolabor.task.TaskManagerConfig;
 import com.codexperiments.robolabor.task.TaskManagerException;
 import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.handler.Task;
+import com.codexperiments.robolabor.task.handler.TaskCallback;
 import com.codexperiments.robolabor.task.handler.TaskIdentifiable;
+import com.codexperiments.robolabor.task.handler.TaskNotifier;
 import com.codexperiments.robolabor.task.handler.TaskProgress;
 import com.codexperiments.robolabor.task.handler.TaskResult;
 import com.codexperiments.robolabor.task.handler.TaskStart;
@@ -68,6 +71,7 @@ public class TaskManagerAndroid implements TaskManager {
     private Set<TaskContainer<?>> mContainers;
     // Keep tracks of all emitters.
     private Map<TaskEmitterId, TaskEmitterRef> mEmittersById;
+    private Map<TaskCallback, TaskDescriptor<?>> mCallbackRegister;
 
     static {
         TASK_REF_COUNTER = Integer.MIN_VALUE;
@@ -86,8 +90,9 @@ public class TaskManagerAndroid implements TaskManager {
         mServiceIntent = new Intent(mApplication, TaskManagerServiceAndroid.class);
 
         mConfig = pConfig;
-        mContainers = new HashSet<TaskContainer<?>>();
-        mEmittersById = new HashMap<TaskEmitterId, TaskEmitterRef>();
+        mContainers = new HashSet<TaskContainer<?>>(); // TODO Sync
+        mEmittersById = new HashMap<TaskEmitterId, TaskEmitterRef>(); // TODO Sync
+        mCallbackRegister = new ConcurrentHashMap<TaskCallback, TaskDescriptor<?>>();
     }
 
     @Override
@@ -210,26 +215,23 @@ public class TaskManagerAndroid implements TaskManager {
     @Override
     public <TResult> TaskRef<TResult> execute(Task<TResult> pTask) {
         mDefaultScheduler.checkCurrentThread();
-        return execute(pTask, pTask, null);
+        return execute(pTask, pTask/* , null */);
     }
+
+    // @Override
+    // public <TResult> TaskRef<TResult> execute(Task<TResult> pTask, TaskResult<TResult> pTaskResult) {
+    // return execute(pTask, pTaskResult, null);
+    // }
 
     @Override
-    public <TResult> TaskRef<TResult> execute(Task<TResult> pTask, TaskResult<TResult> pTaskResult) {
-        return execute(pTask, pTaskResult, null);
-    }
-
-    protected <TResult> TaskRef<TResult> execute(Task<TResult> pTask,
-                                                 TaskResult<TResult> pTaskResult,
-                                                 TaskContainer<?> pParentContainer)
-    {
+    public <TResult> TaskRef<TResult> execute(Task<TResult> pTask, TaskResult<TResult> pTaskResult/*
+                                                                                                   * , TaskContainer<?>
+                                                                                                   * pParentContainers
+                                                                                                   */) {
         if (pTask == null) throw new NullPointerException("Task is null");
 
         // Create a container to run the task.
-        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask,
-                                                                       pTaskResult,
-                                                                       mDefaultScheduler,
-                                                                       mConfig,
-                                                                       pParentContainer);
+        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, pTaskResult, mDefaultScheduler, mConfig);
         // Remember and run the new task. If an identical task is already executing, do nothing to prevent duplicate tasks.
         if (!mContainers.contains(lContainer)) { // TODO Sync Problem here since we dereference already here.
             // Start the (empty) service to tell the system that TaskManager is running and application shouldn't be killed if
@@ -249,24 +251,24 @@ public class TaskManagerAndroid implements TaskManager {
         }
     }
 
-    @Override
-    public <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult) {
-        mDefaultScheduler.checkCurrentThread();
-        return rebind(pTaskRef, pTaskResult, null);
-    }
+    // @Override
+    // public <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult) {
+    // mDefaultScheduler.checkCurrentThread();
+    // return rebind(pTaskRef, pTaskResult, null);
+    // }
 
     @SuppressWarnings("unchecked")
-    protected <TResult> boolean rebind(TaskRef<TResult> pTaskRef,
-                                       TaskResult<TResult> pTaskResult,
-                                       TaskContainer<?> pParentContainer)
-    {
+    public <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult/*
+                                                                                               * , TaskContainer<?>
+                                                                                               * pParentContainers
+                                                                                               */) {
         if (pTaskRef == null) throw new NullPointerException("Task is null");
         if (pTaskResult == null) throw new NullPointerException("TaskResult is null");
 
         for (TaskContainer<?> lContainer : mContainers) {
             if (lContainer.hasSameRef(pTaskRef)) {
                 // Cast safety is guaranteed by the execute() method that returns a properly typed TaskId for the new container.
-                ((TaskContainer<TResult>) lContainer).replaceHandler(pTaskResult, pParentContainer);
+                ((TaskContainer<TResult>) lContainer).rebind(pTaskResult/* , pParentContainer */);
                 // If Rebound task is over, execute newly attached handler.
                 lContainer.finish();
                 return true;
@@ -302,7 +304,7 @@ public class TaskManagerAndroid implements TaskManager {
      * the context in which it is executed to remove or restore references properly. Thus, TaskManager methods called here are
      * just forwarded to the real TaskManager but with contextual information.
      */
-    private class TaskContainer<TResult> implements Runnable, TaskManager {
+    private class TaskContainer<TResult> implements Runnable, TaskNotifier/* , TaskManager */{
         // Handlers
         private Task<TResult> mTask;
         // private TaskResult<TResult> mTaskResult;
@@ -337,16 +339,17 @@ public class TaskManagerAndroid implements TaskManager {
         public TaskContainer(Task<TResult> pTask,
                              TaskResult<TResult> pTaskResult,
                              TaskScheduler pScheduler,
-                             TaskManagerConfig pConfig,
-                             TaskContainer<?> pParentContainer)
+                             TaskManagerConfig pConfig/*
+                                                       * , TaskContainer<?> pParentContainer
+                                                       */)
         {
             super();
             mTask = pTask;
             // mTaskResult = pTaskResult;
 
             mTaskRef = new TaskRef<TResult>(TASK_REF_COUNTER++);
-            TaskDescriptor<?> lParentDescriptor = (pParentContainer != null) ? pParentContainer.mDescriptor : null;
-            mDescriptor = new TaskDescriptor<TResult>(pTaskResult, lParentDescriptor);
+            // TaskDescriptor<?> lParentDescriptor = (pParentContainer != null) ? pParentContainer.mDescriptor : null;
+            mDescriptor = new TaskDescriptor<TResult>(pTaskResult/* , lParentDescriptor */);
             mTaskId = (pTask instanceof TaskIdentifiable) ? ((TaskIdentifiable) pTask).getId() : null;
             mScheduler = pScheduler;
             mConfig = pConfig;
@@ -608,10 +611,10 @@ public class TaskManagerAndroid implements TaskManager {
          * @param pTaskResult Task handler that must replace previous one.
          * @param pParentContainer Context in which the task handler is executed.
          */
-        protected void replaceHandler(TaskResult<TResult> pTaskResult, TaskContainer<?> pParentContainer) {
+        protected void rebind(TaskResult<TResult> pTaskResult/* , TaskContainer<?> pParentContainer */) {
             // TODO Sync
-            TaskDescriptor<?> lParentDescriptor = (pParentContainer != null) ? pParentContainer.mDescriptor : null;
-            TaskDescriptor<TResult> lDescriptor = new TaskDescriptor<TResult>(pTaskResult, lParentDescriptor);
+            // TaskDescriptor<?> lParentDescriptor = (pParentContainer != null) ? pParentContainer.mDescriptor : null;
+            TaskDescriptor<TResult> lDescriptor = new TaskDescriptor<TResult>(pTaskResult/* , lParentDescriptor */);
             lDescriptor.onStart(true);
             synchronized (this) {
                 // mProgressRunnable = null;
@@ -692,9 +695,9 @@ public class TaskManagerAndroid implements TaskManager {
 
                 try {
                     if (mThrowable == null) {
-                        lDescriptor.onFinish(this, mResult);
+                        lDescriptor.onFinish(/* this, */mResult);
                     } else {
-                        lDescriptor.onFail(this, mThrowable);
+                        lDescriptor.onFail(/* this, */mThrowable);
                     }
                 }
                 // An exception occurred inside onFail. We can't do much now except committing a suicide or ignoring it.
@@ -712,30 +715,30 @@ public class TaskManagerAndroid implements TaskManager {
             }
         }
 
-        @Override
-        public void manage(Object pEmitter) {
-            TaskManagerAndroid.this.manage(pEmitter);
-        }
-
-        @Override
-        public void unmanage(Object pEmitter) {
-            TaskManagerAndroid.this.unmanage(pEmitter);
-        }
-
-        @Override
-        public <TOtherResult> TaskRef<TOtherResult> execute(Task<TOtherResult> pTask) {
-            return TaskManagerAndroid.this.execute(pTask, pTask, this);
-        }
-
-        @Override
-        public <TOtherResult> TaskRef<TOtherResult> execute(Task<TOtherResult> pTask, TaskResult<TOtherResult> pTaskResult) {
-            return TaskManagerAndroid.this.execute(pTask, pTaskResult, this);
-        }
-
-        @Override
-        public <TOtherResult> boolean rebind(TaskRef<TOtherResult> pTaskRef, TaskResult<TOtherResult> pTaskResult) {
-            return TaskManagerAndroid.this.rebind(pTaskRef, pTaskResult, this);
-        }
+        // @Override
+        // public void manage(Object pEmitter) {
+        // TaskManagerAndroid.this.manage(pEmitter);
+        // }
+        //
+        // @Override
+        // public void unmanage(Object pEmitter) {
+        // TaskManagerAndroid.this.unmanage(pEmitter);
+        // }
+        //
+        // @Override
+        // public <TOtherResult> TaskRef<TOtherResult> execute(Task<TOtherResult> pTask) {
+        // return TaskManagerAndroid.this.execute(pTask, pTask, this);
+        // }
+        //
+        // @Override
+        // public <TOtherResult> TaskRef<TOtherResult> execute(Task<TOtherResult> pTask, TaskResult<TOtherResult> pTaskResult) {
+        // return TaskManagerAndroid.this.execute(pTask, pTaskResult, this);
+        // }
+        //
+        // @Override
+        // public <TOtherResult> boolean rebind(TaskRef<TOtherResult> pTaskRef, TaskResult<TOtherResult> pTaskResult) {
+        // return TaskManagerAndroid.this.rebind(pTaskRef, pTaskResult, this);
+        // }
 
         private Runnable prepareProgress() {
             // mProgressRunnable = new Runnable() {
@@ -768,7 +771,7 @@ public class TaskManagerAndroid implements TaskManager {
                                 return;
                             }
                         }
-                        lDescriptor.onProgress(TaskContainer.this);
+                        lDescriptor.onProgress(/* TaskContainer.this */);
                     }
                     // An exception occurred inside onFail. We can't do much now except committing a suicide or ignoring it.
                     catch (RuntimeException eRuntimeException) {
@@ -782,7 +785,7 @@ public class TaskManagerAndroid implements TaskManager {
             };
         }
 
-        @Override
+        // @Override
         public void notifyProgress(/* final TaskProgress pTaskProgress */) {
             // if (pTaskProgress == null) throw new NullPointerException("Progress is null");
             //
@@ -923,7 +926,7 @@ public class TaskManagerAndroid implements TaskManager {
 
     private/* TODO static */final class TaskDescriptor<TResult> {
         private final TaskResult<TResult> mTaskResult;
-        private final TaskDescriptor<?> mParentDescriptor;
+        private final List<TaskDescriptor<?>> mParentDescriptors;
         private final List<TaskEmitterDescriptor> mEmitterDescriptors;
         // Counts the number of time a task has been referenced without being dereferenced. A task will be dereferenced only when
         // this counter reaches 0, which means that no other task needs references to be set. This situation can occur for example
@@ -931,12 +934,17 @@ public class TaskManagerAndroid implements TaskManager {
         // not dereference emitters because the parent task is still in its onFinish() callback and may need references to them.
         private int mReferenceCounter;
 
-        public TaskDescriptor(TaskResult<TResult> pTaskResult, TaskDescriptor<?> pParentDescriptor) {
+        public TaskDescriptor(TaskResult<TResult> pTaskResult/* , TaskDescriptor<?> pParentDescriptor */) {
             mTaskResult = pTaskResult;
-            mParentDescriptor = pParentDescriptor;
+            mParentDescriptors = new ArrayList<TaskManagerAndroid.TaskDescriptor<?>>();
             mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1); // Most of the time, a task will have only one emitter.
             mReferenceCounter = 0;
+
+            mCallbackRegister.put(pTaskResult, this);
         }
+
+        // private TaskEmitterRef findParentDescriptor(Field pField) {
+        // }
 
         public boolean matchesId(TaskEmitterId pTaskEmitterId) {
             if (mTaskResult instanceof TaskStart) {
@@ -1002,8 +1010,10 @@ public class TaskManagerAndroid implements TaskManager {
                 // Extract the emitter "reflectively" and compute its Id.
                 TaskEmitterRef lEmitterRef = null;
                 Object lEmitter = pField.get(mTaskResult);
+
                 if (lEmitter != null) {
                     lEmitterRef = resolveRef(lEmitter);
+                    lookForParentDescriptor(pField, lEmitter);
                 }
                 // If reference is null, that means the emitter is probably used in a parent container and already managed.
                 // Try to find its Id in parent containers.
@@ -1023,24 +1033,69 @@ public class TaskManagerAndroid implements TaskManager {
             }
         }
 
-        private TaskEmitterRef findEmitterRefInParentContainers(Field pField) {
-            TaskDescriptor<?> lParentDescriptor = mParentDescriptor;
-            while (lParentDescriptor != null) {
-                TaskEmitterRef lEmitterRef;
-                for (TaskEmitterDescriptor lParentEmitterDescriptor : lParentDescriptor.mEmitterDescriptors) {
-                    lEmitterRef = lParentEmitterDescriptor.hasSameType(pField);
-                    if (lEmitterRef != null) {
-                        return lParentEmitterDescriptor.mEmitterRef;
-                    }
+        private void lookForParentDescriptor(Field pField, Object pEmitter) {
+            if (pField.getType().isAssignableFrom(TaskCallback.class)) {
+                TaskDescriptor<?> lDescriptor = mCallbackRegister.get(pEmitter);
+                if (lDescriptor != null) {
+                    mParentDescriptors.add(lDescriptor);
+                } else {
+                    // TODO Throw
                 }
-                lParentDescriptor = lParentDescriptor.mParentDescriptor;
+            } else {
+                try {
+                    // Go through the main class and each of its super classes and look for "this$" fields.
+                    Class<?> lTaskResultClass = pEmitter.getClass();
+                    while (lTaskResultClass != Object.class) {
+                        // If current class is an inner class...
+                        if ((lTaskResultClass.getEnclosingClass() != null) && !Modifier.isStatic(lTaskResultClass.getModifiers())) {
+                            // Find emitter references and manage them.
+                            for (Field lField : lTaskResultClass.getDeclaredFields()) {
+                                if (lField.getName().startsWith("this$")) {
+                                    Object lParentEmitter = lField.get(pEmitter);
+                                    if (lParentEmitter != null) {
+                                        lookForParentDescriptor(lField, lParentEmitter);
+                                    } else {
+                                        findEmitterRefInParentContainers(lField);
+                                    }
+                                }
+                            }
+                        }
+                        lTaskResultClass = lTaskResultClass.getSuperclass();
+                    }
+                } catch (IllegalArgumentException eIllegalArgumentException) {
+                    throw internalError(eIllegalArgumentException);
+                } catch (IllegalAccessException eIllegalAccessException) {
+                    throw internalError(eIllegalAccessException);
+                }
+            }
+        }
+
+        private TaskEmitterRef findEmitterRefInParentContainers(Field pField) {
+            List<TaskDescriptor<?>> lParentDescriptors = mParentDescriptors;
+            if (lParentDescriptors == null) {
+                return null;
+            } else {
+                for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
+                    TaskEmitterRef lEmitterRef;
+                    for (TaskEmitterDescriptor lParentEmitterDescriptor : lParentDescriptor.mEmitterDescriptors) {
+                        lEmitterRef = lParentEmitterDescriptor.hasSameType(pField);
+                        if (lEmitterRef != null) return lEmitterRef;
+                    }
+
+                    lEmitterRef = lParentDescriptor.findEmitterRefInParentContainers(pField);
+                    if (lEmitterRef != null) return lEmitterRef;
+                }
             }
             return null;
         }
 
         // TODO Comments
         private void prepareReferenceCounter() {
-            if (mParentDescriptor != null) mParentDescriptor.prepareReferenceCounter();
+            if (mParentDescriptors != null) {
+                for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
+                    lParentDescriptor.prepareReferenceCounter();
+                }
+            }
             ++mReferenceCounter;
         }
 
@@ -1053,7 +1108,11 @@ public class TaskManagerAndroid implements TaskManager {
          * @return Id of the emitter.
          */
         private void dereferenceEmitter() {
-            if (mParentDescriptor != null) mParentDescriptor.dereferenceEmitter();
+            if (mParentDescriptors != null) {
+                for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
+                    lParentDescriptor.dereferenceEmitter();
+                }
+            }
 
             if ((--mReferenceCounter) == 0) {
                 for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
@@ -1071,7 +1130,12 @@ public class TaskManagerAndroid implements TaskManager {
          */
         private boolean referenceEmitter() {
             // Try to restore emitters in parent containers.
-            boolean lRestored = (mParentDescriptor == null) || mParentDescriptor.referenceEmitter();
+            boolean lRestored = true;
+            if (mParentDescriptors != null) {
+                for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
+                    lRestored &= lParentDescriptor.referenceEmitter();
+                }
+            }
 
             // Restore references for current container.
             if ((mReferenceCounter++) == 0) {
@@ -1088,21 +1152,21 @@ public class TaskManagerAndroid implements TaskManager {
             }
         }
 
-        public void onProgress(TaskManager pTaskManager) {
+        public void onProgress() {
             if (mTaskResult instanceof TaskProgress) {
-                ((TaskProgress) mTaskResult).onProgress(pTaskManager);
+                ((TaskProgress) mTaskResult).onProgress();
             }
         }
 
-        public void onFinish(TaskManager pTaskManager, TResult pResult) {
+        public void onFinish(TResult pResult) {
             if (mTaskResult instanceof TaskResult) {
-                mTaskResult.onFinish(pTaskManager, pResult);
+                mTaskResult.onFinish(pResult);
             }
         }
 
-        public void onFail(TaskManager pTaskManager, Throwable pException) {
+        public void onFail(Throwable pException) {
             if (mTaskResult instanceof TaskResult) {
-                mTaskResult.onFail(pTaskManager, pException);
+                mTaskResult.onFail(pException);
             }
         }
     }

@@ -10,7 +10,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import android.test.UiThreadTest;
 
-import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskManagerConfig;
 import com.codexperiments.robolabor.task.TaskManagerException;
 import com.codexperiments.robolabor.task.TaskRef;
@@ -18,6 +17,7 @@ import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerConfigAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerServiceAndroid;
 import com.codexperiments.robolabor.task.handler.Task;
+import com.codexperiments.robolabor.task.handler.TaskNotifier;
 import com.codexperiments.robolabor.task.handler.TaskResult;
 import com.codexperiments.robolabor.test.common.TestCase;
 import com.codexperiments.robolabor.test.task.helper.BackgroundTask;
@@ -543,10 +543,12 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
     @UiThreadTest
     public void testRebind_inner_managed_nonExistingTask() throws Throwable {
         boolean lBound = mTaskManager.rebind(new TaskRef<Integer>(Integer.MAX_VALUE), new TaskResult<Integer>() {
-            public void onFinish(TaskManager pTaskManager, Integer pTaskResult) {
+            @Override
+            public void onFinish(Integer pTaskResult) {
             }
 
-            public void onFail(TaskManager pTaskManager, Throwable pTaskException) {
+            @Override
+            public void onFail(Throwable pTaskException) {
             }
         });
         assertThat(lBound, equalTo(false));
@@ -589,14 +591,14 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
         try {
             mTaskManager.execute(new Task<Integer>() {
 
-                public Integer onProcess(TaskManager pTaskManager) throws Exception {
+                public Integer onProcess(TaskNotifier pNotifier) throws Exception {
                     return null;
                 }
 
-                public void onFinish(TaskManager pTaskManager, Integer pTaskResult) {
+                public void onFinish(Integer pTaskResult) {
                 }
 
-                public void onFail(TaskManager pTaskManager, Throwable pTaskException) {
+                public void onFail(Throwable pTaskException) {
                 }
             });
             fail();

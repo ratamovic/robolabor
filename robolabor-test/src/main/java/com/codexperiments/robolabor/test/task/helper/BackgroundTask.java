@@ -12,8 +12,8 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskRef;
+import com.codexperiments.robolabor.task.handler.TaskNotifier;
 import com.codexperiments.robolabor.task.util.ProgressTask;
 
 public class BackgroundTask implements ProgressTask<Integer> {
@@ -69,7 +69,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
     }
 
     @Override
-    public Integer onProcess(TaskManager pTaskManager) throws Exception {
+    public Integer onProcess(TaskNotifier pNotifier) throws Exception {
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure task is executed only once.
         // We have two cases here: either we loop until step by step is over or until we have performed all iterations.
         // We know that we are in step by step mode if mStepByStep is true at the beginning of the loop.
@@ -80,7 +80,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
 
             Thread.sleep(TASK_STEP_DURATION_MS);
             ++mStepCounter;
-            pTaskManager.notifyProgress(/* this */);
+            pNotifier.notifyProgress(/* this */);
             notifyEnded();
         }
         if (mExpectedTaskException == null) {
@@ -91,7 +91,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
     }
 
     @Override
-    public void onProgress(TaskManager pTaskManager) {
+    public void onProgress() {
         ++mProgressCounter;
         if (mTaskStepProgress != null) {
             mTaskStepProgress.countDown();
@@ -99,7 +99,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
     }
 
     @Override
-    public void onFinish(TaskManager pTaskManager, Integer pTaskResult) {
+    public void onFinish(Integer pTaskResult) {
         // Check if outer object reference has been restored (or not).
         if (mCheckEmitterNull != null) {
             if (mCheckEmitterNull) {
@@ -117,7 +117,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
     }
 
     @Override
-    public void onFail(TaskManager pTaskManager, Throwable pTaskException) {
+    public void onFail(Throwable pTaskException) {
         mTaskException = pTaskException;
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure termination handler is executed only once.
         mTaskFinished.countDown();
