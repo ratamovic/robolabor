@@ -494,8 +494,7 @@ public class TaskManagerAndroid implements TaskManager {
 
         public TaskDescriptor(TaskResult<TResult> pTaskResult) {
             mTaskResult = pTaskResult;
-            // Most of the time, a task will have only one emitter or parent.
-            mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1);
+            mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1); // Most of the time, a task will have only one emitter.
             mParentDescriptors = null;
             mReferenceCounter = 0;
         }
@@ -594,6 +593,8 @@ public class TaskManagerAndroid implements TaskManager {
                 if (lDescriptor == null) throw taskExecutedFromUnexecutedTask(pEmitter);
 
                 if (mParentDescriptors == null) {
+                    // A task will have most of the time no parents. Hence lazy-initialization. But if that's not the case, then a
+                    // task will usually have only one parent, rarely more.
                     mParentDescriptors = new HashSet<TaskManagerAndroid.TaskDescriptor<?>>(1);
                 }
                 mParentDescriptors.add(lDescriptor);
