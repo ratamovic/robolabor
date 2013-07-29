@@ -7,6 +7,7 @@ import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndr
 import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.invalidEmitterId;
 import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.mustBeExecutedFromUIThread;
 import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.notCalledFromTask;
+import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.taskExecutedFromUnexecutedTask;
 import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.unmanagedEmittersNotAllowed;
 
 import java.lang.ref.WeakReference;
@@ -408,7 +409,7 @@ public class TaskManagerAndroid implements TaskManager {
             // TODO Don't like the configuration parameter here.
             mFinished = lDescriptor.onFinish(mResult, mThrowable, mConfig.keepResultOnHold(mTask));
             if (mFinished) {
-                notifyFinished(this); // TODO Sync
+                notifyFinished(this);
             }
             return mFinished;
         }
@@ -589,11 +590,9 @@ public class TaskManagerAndroid implements TaskManager {
         private void lookForParentDescriptor(Field pField, Object pEmitter) {
             if (TaskCallback.class.isAssignableFrom(pField.getType())) {
                 TaskDescriptor<?> lDescriptor = mDescriptors.get(pEmitter);
-                if (lDescriptor != null) {
-                    mParentDescriptors.add(lDescriptor);
-                } else {
-                    // TODO Throw
-                }
+                if (lDescriptor == null) throw taskExecutedFromUnexecutedTask(pEmitter);
+
+                mParentDescriptors.add(lDescriptor);
             } else {
                 try {
                     // Go through the main class and each of its super classes and look for "this$" fields.
@@ -824,7 +823,8 @@ public class TaskManagerAndroid implements TaskManager {
     }
 
     /**
-     * TODO Comments
+     * Represents a reference to an emitter. Its goal is to add a level of indirection to the emitter so that several tasks can
+     * easily share updates made to an emitter.
      */
     private static final class TaskEmitterRef {
         private final TaskEmitterId mEmitterId;
