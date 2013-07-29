@@ -47,6 +47,10 @@ public class TaskManagerExceptionAndroid extends TaskManagerException {
         return new TaskManagerExceptionAndroid("This operation must be called inside a task.");
     }
 
+    public static TaskManagerExceptionAndroid progressCalledAfterTaskFinished() {
+        return new TaskManagerExceptionAndroid("notifyProgress() called after task finished.");
+    }
+
     public static TaskManagerExceptionAndroid taskExecutedFromUnexecutedTask(Object pEmitter) {
         return new TaskManagerExceptionAndroid("Task executed from parent task %1$s that hasn't been executed yet.", pEmitter);
     }

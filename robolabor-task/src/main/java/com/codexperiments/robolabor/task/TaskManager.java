@@ -58,8 +58,9 @@ import com.codexperiments.robolabor.task.handler.TaskResult;
  * appropriately handled).</li>
  * </ul>
  * 
- * During or after processing, several handlers (i.e. callbacks) can be called:
+ * Before, during or after processing, several handlers (i.e. callbacks) can be called:
  * <ul>
+ * <li>onStart()</li>
  * <li>onProgress()</li>
  * <li>onFinish()</li>
  * <li>onFail()</li>
