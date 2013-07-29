@@ -40,8 +40,6 @@ import com.codexperiments.robolabor.task.id.TaskId;
 import com.codexperiments.robolabor.task.util.AutoCleanMap;
 
 /**
- * TODO Remove the need for contextual call.
- * 
  * TODO Remove TaskId but create a TaskEquality helper class.
  * 
  * TODO Handle cancellation.
@@ -51,8 +49,6 @@ import com.codexperiments.robolabor.task.util.AutoCleanMap;
  * TODO Save TaskRefs list.
  * 
  * TODO TaskRef add a Tag
- * 
- * TODO Add an onStart() handler.
  * 
  * TODO pending(TaskType)
  */
@@ -481,10 +477,15 @@ public class TaskManagerAndroid implements TaskManager {
         }
     }
 
+    /**
+     * Contains all the information necessary to restore all the emitters (even parent emitters) of a task. Once prepareToRun() is
+     * called, the content of this class is not modified anymore (except the emitter and the reference counter dedicated to
+     * referencing and dereferencing).
+     */
     private final class TaskDescriptor<TResult> {
         private final TaskResult<TResult> mTaskResult;
         private final List<TaskEmitterDescriptor> mEmitterDescriptors;
-        private final Set<TaskDescriptor<?>> mParentDescriptors;
+        private Set<TaskDescriptor<?>> mParentDescriptors; // Not final because lazy-initialized.
         // Counts the number of time a task has been referenced without being dereferenced. A task will be dereferenced only when
         // this counter reaches 0, which means that no other task needs references to be set. This situation can occur for example
         // when starting a child task from a parent task callback (e.g. in onFinish()): when the child task is launched, it must
@@ -495,7 +496,7 @@ public class TaskManagerAndroid implements TaskManager {
             mTaskResult = pTaskResult;
             // Most of the time, a task will have only one emitter or parent.
             mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1);
-            mParentDescriptors = new HashSet<TaskManagerAndroid.TaskDescriptor<?>>(1);
+            mParentDescriptors = null;
             mReferenceCounter = 0;
         }
 
@@ -592,6 +593,9 @@ public class TaskManagerAndroid implements TaskManager {
                 TaskDescriptor<?> lDescriptor = mDescriptors.get(pEmitter);
                 if (lDescriptor == null) throw taskExecutedFromUnexecutedTask(pEmitter);
 
+                if (mParentDescriptors == null) {
+                    mParentDescriptors = new HashSet<TaskManagerAndroid.TaskDescriptor<?>>(1);
+                }
                 mParentDescriptors.add(lDescriptor);
             } else {
                 try {
@@ -603,7 +607,7 @@ public class TaskManagerAndroid implements TaskManager {
                             // Find emitter references and manage them.
                             for (Field lField : lTaskResultClass.getDeclaredFields()) {
                                 if (lField.getName().startsWith("this$")) {
-                                    lField.setAccessible(true); // TODO Use only class
+                                    lField.setAccessible(true);
                                     Object lParentEmitter = lField.get(pEmitter);
                                     if (lParentEmitter != null) {
                                         lookForParentDescriptor(lField, lParentEmitter);
@@ -624,10 +628,7 @@ public class TaskManagerAndroid implements TaskManager {
         }
 
         private TaskEmitterRef findEmitterRefInParentContainers(Field pField) {
-            Set<TaskDescriptor<?>> lParentDescriptors = mParentDescriptors;
-            if (lParentDescriptors == null) {
-                return null;
-            } else {
+            if (mParentDescriptors != null) {
                 for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
                     TaskEmitterRef lEmitterRef;
                     for (TaskEmitterDescriptor lParentEmitterDescriptor : lParentDescriptor.mEmitterDescriptors) {
@@ -678,7 +679,7 @@ public class TaskManagerAndroid implements TaskManager {
         private boolean referenceEmitter() {
             // Try to restore emitters in parent containers first. Everything is rolled-back if referencing fails.
             boolean lRestored = true;
-            if (mParentDescriptors != null) { // TODO Make null
+            if (mParentDescriptors != null) {
                 for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
                     lRestored &= lParentDescriptor.referenceEmitter();
                 }
