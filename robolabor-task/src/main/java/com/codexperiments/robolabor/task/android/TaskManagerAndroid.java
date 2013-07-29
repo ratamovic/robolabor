@@ -180,12 +180,12 @@ public class TaskManagerAndroid implements TaskManager {
         mDefaultScheduler.checkCurrentThread();
 
         // Create a container to run the task.
-        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, pTaskResult, mDefaultScheduler, mConfig);
+        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, mDefaultScheduler, mConfig);
         // Remember and run the new task. If an identical task is already executing, do nothing.
         if (mContainers.add(lContainer)) {
             // Prepare the task (i.e. cache needed values) before adding it because the first operation can fail (and we don't
             // want to leave the container list in an incorrect state).
-            TaskRef<TResult> lTaskRef = lContainer.prepareToRun(false);
+            TaskRef<TResult> lTaskRef = lContainer.prepareToRun(pTaskResult);
             mConfig.resolveExecutor(pTask).execute(lContainer);
             return lTaskRef;
         } else {
@@ -231,29 +231,25 @@ public class TaskManagerAndroid implements TaskManager {
 
         // Container info.
         private volatile TaskDescriptor<TResult> mDescriptor;
-        private TaskRef<TResult> mTaskRef;
-        private TaskId mTaskId;
-        private TaskScheduler mScheduler;
-        private TaskManagerConfig mConfig;
+        private final TaskRef<TResult> mTaskRef;
+        private final TaskId mTaskId;
+        private final TaskScheduler mScheduler;
+        private final TaskManagerConfig mConfig;
 
         // Task result and state.
         private TResult mResult;
         private Throwable mThrowable;
-        private boolean mProcessed;
+        private boolean mRunning;
         private boolean mFinished;
 
         // Cached values.
         private Runnable mProgressRunnable;
 
-        public TaskContainer(Task<TResult> pTask,
-                             TaskResult<TResult> pTaskResult,
-                             TaskScheduler pScheduler,
-                             TaskManagerConfig pConfig)
-        {
+        public TaskContainer(Task<TResult> pTask, TaskScheduler pScheduler, TaskManagerConfig pConfig) {
             super();
             mTask = pTask;
 
-            mDescriptor = new TaskDescriptor<TResult>(pTaskResult);
+            mDescriptor = null;
             mTaskRef = new TaskRef<TResult>(TASK_REF_COUNTER++);
             mTaskId = (pTask instanceof TaskIdentifiable) ? ((TaskIdentifiable) pTask).getId() : null;
             mScheduler = pScheduler;
@@ -261,23 +257,29 @@ public class TaskManagerAndroid implements TaskManager {
 
             mResult = null;
             mThrowable = null;
-            mProcessed = false;
+            mRunning = true;
             mFinished = false;
 
-            mProgressRunnable = prepareProgress();
+            prepareCallbacks();
         }
 
         /**
          * Initialize the container (i.e. cache needed values, ...) before running it.
          */
-        protected TaskRef<TResult> prepareToRun(boolean pIsRestored) {
-            TaskDescriptor<TResult> lDescriptor = mDescriptor;
-            lDescriptor.onStart(false);
-
+        protected TaskRef<TResult> prepareToRun(TaskResult<TResult> pTaskResult) {
+            final TaskDescriptor<TResult> lDescriptor = new TaskDescriptor<TResult>(pTaskResult);
             if (!lDescriptor.isSameAsTask(mTask)) {
                 prepareTask();
             }
             lDescriptor.prepareToRun();
+            mScheduler.scheduleCallbackIfNecessary(new Runnable() {
+                public void run() {
+                    lDescriptor.onStart(true);
+                }
+            });
+
+            mDescriptor = lDescriptor;
+            mDescriptors.put(pTaskResult, lDescriptor); // TODO Check for optim
             return mTaskRef;
         }
 
@@ -312,6 +314,14 @@ public class TaskManagerAndroid implements TaskManager {
             }
         }
 
+        private void prepareCallbacks() {
+            mProgressRunnable = new Runnable() {
+                public void run() {
+                    mDescriptor.onProgress();
+                }
+            };
+        }
+
         /**
          * Run background task on Executor-thread
          */
@@ -323,7 +333,7 @@ public class TaskManagerAndroid implements TaskManager {
             } finally {
                 mScheduler.scheduleCallback(new Runnable() {
                     public void run() {
-                        mProcessed = true;
+                        mRunning = false;
                         finish();
                     }
                 });
@@ -335,32 +345,20 @@ public class TaskManagerAndroid implements TaskManager {
          * 
          * @param pTaskEmitterId
          */
-        private void restore(final TaskDescriptor<TResult> pInitialDescriptor) {
-            TaskDescriptor<TResult> lDescriptor = mDescriptor;
-            // When runnable finally gets executed, task may have been rebound in-between. Hence the equality check.
-            if (lDescriptor == pInitialDescriptor) {
-                if (!finish()) {
-                    if (lDescriptor.referenceEmitter()) {
-                        try {
-                            lDescriptor.onStart(true);
-                        } catch (RuntimeException eRuntimeException) {
-                            if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
-                        } finally {
-                            lDescriptor.dereferenceEmitter();
-                        }
+        private void restore(final TaskDescriptor<TResult> pDescriptor) {
+            mScheduler.scheduleCallbackIfNecessary(new Runnable() {
+                public void run() {
+                    if (!finish()) {
+                        pDescriptor.onStart(true);
                     }
                 }
-            }
+            });
         }
 
         protected void manage(TaskEmitterId pEmitterId) {
             final TaskDescriptor<TResult> lDescriptor = mDescriptor;
             if (lDescriptor.matchesId(pEmitterId)) {
-                mScheduler.scheduleCallbackIfNecessary(new Runnable() {
-                    public void run() {
-                        restore(lDescriptor);
-                    }
-                });
+                restore(lDescriptor);
             }
         }
 
@@ -372,15 +370,12 @@ public class TaskManagerAndroid implements TaskManager {
          */
         protected void rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult) {
             if (mTaskRef.equals(pTaskRef)) {
-                final TaskDescriptor<TResult> lNewDescriptor = new TaskDescriptor<TResult>(pTaskResult);
-                lNewDescriptor.prepareToRun();
-                mDescriptor = lNewDescriptor; // TODO Modify scheduler too => synchronized
+                final TaskDescriptor<TResult> lDescriptor = new TaskDescriptor<TResult>(pTaskResult);
+                lDescriptor.prepareToRun();
+                restore(lDescriptor);
 
-                mScheduler.scheduleCallbackIfNecessary(new Runnable() {
-                    public void run() {
-                        restore(lNewDescriptor);
-                    }
-                });
+                mDescriptor = lDescriptor;
+                mDescriptors.put(pTaskResult, lDescriptor); // TODO Check for optim
             }
         }
 
@@ -406,59 +401,20 @@ public class TaskManagerAndroid implements TaskManager {
          */
         private boolean finish() {
             // Execute task termination handlers if they have not been yet (but only if the task has been fully processed).
-            if (!mProcessed || mFinished) return false;
+            if (mRunning) return false;
+            if (mFinished) return true;
 
-            // A task can be considered finished only if referencing succeed or if an option allows bypassing referencing failure.
             TaskDescriptor<TResult> lDescriptor = mDescriptor;
-            boolean lRestored = true;
-            if (!lDescriptor.referenceEmitter()) {
-                if (mConfig.keepResultOnHold(mTask)) {
-                    return false;
-                } else {
-                    lRestored = false;
-                }
+            // TODO Don't like the configuration parameter here.
+            mFinished = lDescriptor.onFinish(mResult, mThrowable, mConfig.keepResultOnHold(mTask));
+            if (mFinished) {
+                notifyFinished(this); // TODO Sync
             }
-            mFinished = true;
-
-            // Run termination callbacks.
-            try {
-                if (mThrowable == null) {
-                    lDescriptor.onFinish(mResult);
-                } else {
-                    lDescriptor.onFail(mThrowable);
-                }
-            } catch (RuntimeException eRuntimeException) {
-                if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
-            } finally {
-                // After task is over, it may still get dereferenced (e.g. if a child task gets executed). So dereference it
-                // immediately to leave it in a clean state. This will ease potential NullPointerException detection (e.g. if
-                // an inner task is executed from termination handler of another task).
-                if (lRestored) lDescriptor.dereferenceEmitter();
-            }
-            notifyFinished(this); // TODO Sync
-            return true;
-        }
-
-        private Runnable prepareProgress() {
-            return new Runnable() {
-                public void run() {
-                    TaskDescriptor<TResult> lDescriptor = mDescriptor;
-                    if (lDescriptor.referenceEmitter()) {
-                        try {
-                            lDescriptor.onProgress();
-                        } catch (RuntimeException eRuntimeException) {
-                            if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
-                        } finally {
-                            lDescriptor.dereferenceEmitter();
-                        }
-                    }
-                }
-            };
+            return mFinished;
         }
 
         @Override
         public void notifyProgress() {
-            // TODO Comments
             // Progress is always executed on the UI-Thread but sent from a non-UI-Thread (except if called from onFinish() or
             // onFail() but that shouldn't occur often).
             mScheduler.scheduleCallback(mProgressRunnable);
@@ -540,8 +496,6 @@ public class TaskManagerAndroid implements TaskManager {
             mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1);
             mParentDescriptors = new HashSet<TaskManagerAndroid.TaskDescriptor<?>>(1);
             mReferenceCounter = 0;
-
-            mDescriptors.put(pTaskResult, this); // TODO Check for optim
         }
 
         public boolean matchesId(TaskEmitterId pEmitterId) {
@@ -757,26 +711,59 @@ public class TaskManagerAndroid implements TaskManager {
 
         public void onStart(boolean pIsRestored) {
             if (mTaskResult instanceof TaskStart) {
-                ((TaskStart) mTaskResult).onStart(pIsRestored);
+                if (referenceEmitter()) {
+                    try {
+                        ((TaskStart) mTaskResult).onStart(pIsRestored);
+                    } catch (RuntimeException eRuntimeException) {
+                        if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
+                    } finally {
+                        dereferenceEmitter();
+                    }
+                }
             }
         }
 
         public void onProgress() {
             if (mTaskResult instanceof TaskProgress) {
-                ((TaskProgress) mTaskResult).onProgress();
+                if (referenceEmitter()) {
+                    try {
+                        ((TaskProgress) mTaskResult).onProgress();
+                    } catch (RuntimeException eRuntimeException) {
+                        if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
+                    } finally {
+                        dereferenceEmitter();
+                    }
+                }
             }
         }
 
-        public void onFinish(TResult pResult) {
-            if (mTaskResult instanceof TaskResult) {
-                mTaskResult.onFinish(pResult);
+        public boolean onFinish(TResult pResult, Throwable pThrowable, boolean pKeepResultOnHold) {
+            // A task can be considered finished only if referencing succeed or if an option allows bypassing referencing failure.
+            boolean lRestored = true;
+            if (!referenceEmitter()) {
+                if (pKeepResultOnHold) {
+                    return false;
+                } else {
+                    lRestored = false;
+                }
             }
-        }
 
-        public void onFail(Throwable pException) {
-            if (mTaskResult instanceof TaskResult) {
-                mTaskResult.onFail(pException);
+            // Run termination callbacks.
+            try {
+                if (pThrowable == null) {
+                    mTaskResult.onFinish(pResult);
+                } else {
+                    mTaskResult.onFail(pThrowable);
+                }
+            } catch (RuntimeException eRuntimeException) {
+                if (mConfig.crashOnHandlerFailure()) throw eRuntimeException;
+            } finally {
+                // After task is over, it may still get dereferenced (e.g. if a child task gets executed). So dereference it
+                // immediately to leave it in a clean state. This will ease potential NullPointerException detection (e.g. if
+                // an inner task is executed from termination handler of another task).
+                if (lRestored) dereferenceEmitter();
             }
+            return true;
         }
     }
 
