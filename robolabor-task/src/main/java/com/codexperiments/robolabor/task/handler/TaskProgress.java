@@ -3,7 +3,7 @@ package com.codexperiments.robolabor.task.handler;
 /**
  * TODO Pass a progression object.
  */
-public interface TaskProgress extends TaskCallback {
+public interface TaskProgress extends TaskHandler {
     /**
      * Handler method called when task computation notifies of some progress. This method is called on the UI Thread. This is
      * where objects or components related to the UI should be updated (e.g. increasing a progression bar). It is safe to call any

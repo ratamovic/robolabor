@@ -27,7 +27,7 @@ import com.codexperiments.robolabor.task.TaskManagerConfig;
 import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.TaskScheduler;
 import com.codexperiments.robolabor.task.handler.Task;
-import com.codexperiments.robolabor.task.handler.TaskCallback;
+import com.codexperiments.robolabor.task.handler.TaskHandler;
 import com.codexperiments.robolabor.task.handler.TaskIdentifiable;
 import com.codexperiments.robolabor.task.handler.TaskNotifier;
 import com.codexperiments.robolabor.task.handler.TaskProgress;
@@ -62,9 +62,9 @@ public class TaskManagerAndroid implements TaskManager {
     // cleaned and accumulates references because it assumes that any object that managed object set doesn't grow infinitely but
     // is rather limited (e.g. typically all fragments, activity and manager in an Application).
     private Map<TaskEmitterId, TaskEmitterRef> mEmitters;
-    // Allows getting back an existing descriptor through its callback when dealing with nested tasks. An AutoCleanMap is
-    // neceassary since there is no way to know when a callback are not necessary anymore.
-    private Map<TaskCallback, TaskDescriptor<?>> mDescriptors;
+    // Allows getting back an existing descriptor through its handler when dealing with nested tasks. An AutoCleanMap is necessary
+    // since there is no way to know when a handler are not necessary anymore.
+    private Map<TaskHandler, TaskDescriptor<?>> mDescriptors;
 
     static {
         TASK_REF_COUNTER = Integer.MIN_VALUE;
@@ -77,7 +77,7 @@ public class TaskManagerAndroid implements TaskManager {
         mConfig = pConfig;
         mContainers = Collections.newSetFromMap(new ConcurrentHashMap<TaskContainer<?>, Boolean>(DEFAULT_CAPACITY));
         mEmitters = new ConcurrentHashMap<TaskEmitterId, TaskEmitterRef>(DEFAULT_CAPACITY);
-        mDescriptors = new AutoCleanMap<TaskCallback, TaskDescriptor<?>>(DEFAULT_CAPACITY);
+        mDescriptors = new AutoCleanMap<TaskHandler, TaskDescriptor<?>>(DEFAULT_CAPACITY);
     }
 
     @Override
@@ -283,8 +283,8 @@ public class TaskManagerAndroid implements TaskManager {
             }
             // Make the descriptor visible once fully initialized.
             mDescriptor = lDescriptor;
-            // Execute onStart() callback.
-            mScheduler.scheduleCallbackIfNecessary(new Runnable() {
+            // Execute onStart() handler.
+            mScheduler.scheduleIfNecessary(new Runnable() {
                 public void run() {
                     lDescriptor.onStart(true);
                 }
@@ -296,8 +296,8 @@ public class TaskManagerAndroid implements TaskManager {
         }
 
         /**
-         * Dereference the task itself if it is disjoint from its callback handlers. This is definitive. No code inside the task
-         * is allowed to access this$x references.
+         * Dereference the task itself if it is disjoint from its handlers. This is definitive. No code inside the task is allowed
+         * to access this$x references.
          */
         private void prepareTask() {
             try {
@@ -336,7 +336,7 @@ public class TaskManagerAndroid implements TaskManager {
             } catch (final Exception eException) {
                 mThrowable = eException;
             } finally {
-                mScheduler.scheduleCallback(new Runnable() {
+                mScheduler.schedule(new Runnable() {
                     public void run() {
                         mRunning = false;
                         finish();
@@ -386,7 +386,7 @@ public class TaskManagerAndroid implements TaskManager {
          *            concurrently through rebind.
          */
         private void restore(final TaskDescriptor<TResult> pDescriptor) {
-            mScheduler.scheduleCallbackIfNecessary(new Runnable() {
+            mScheduler.scheduleIfNecessary(new Runnable() {
                 public void run() {
                     if (!finish()) {
                         pDescriptor.onStart(true);
@@ -403,13 +403,13 @@ public class TaskManagerAndroid implements TaskManager {
          * <li>When task isn't finished yet, in which case nothing happens. This can occur if a new instance of the emitter
          * becomes managed while task is still executing: the task manager try to call finish on all tasks.</li>
          * <li>When task has just finished, i.e. finish is called from the computation thread, and its emitter is available. In
-         * this case, the flag is set to true and task final callback is triggered.</li>
+         * this case, the flag is set to true and task termination handler is triggered.</li>
          * <li>When task has just finished but its emitter is not available yet, i.e. it has been unmanaged. In this case, the
-         * flag is set to true but task final callback is NOT triggered. it will be triggered later when a new emitter (with the
-         * same Id) becomes managed.</li>
+         * flag is set to true but task termination handler is NOT triggered. it will be triggered later when a new emitter (with
+         * the same Id) becomes managed.</li>
          * <li>When an emitter with the same Id as the previously managed-then-unmanaged one becomes managed. In this case the
-         * flag is already true but the final task callback may have not been called yet (i.e. if mFinished is false). This can be
-         * done now. Note hat it is possible to have finish() called several times since there may be a delay between finish()
+         * flag is already true but task termination handler may have not been called yet (i.e. if mFinished is false). This can
+         * be done now. Note hat it is possible to have finish() called several times since there may be a delay between finish()
          * call and execution as it is posted on the UI Thread.</li>
          * </ul>
          * 
@@ -433,7 +433,7 @@ public class TaskManagerAndroid implements TaskManager {
         public void notifyProgress() {
             // Progress is always executed on the scheduler Thread but sent from the background Thread.
             if (!mRunning) throw progressCalledAfterTaskFinished();
-            mScheduler.scheduleCallback(mProgressRunnable);
+            mScheduler.schedule(mProgressRunnable);
         }
 
         @Override
@@ -480,8 +480,8 @@ public class TaskManagerAndroid implements TaskManager {
         private List<TaskDescriptor<?>> mParentDescriptors; // Never modified once initialized in prepareDescriptor().
         // Counts the number of time a task has been referenced without being dereferenced. A task will be dereferenced only when
         // this counter reaches 0, which means that no other task needs references to be set. This situation can occur for example
-        // when starting a child task from a parent task callback (e.g. in onFinish()): when the child task is launched, it must
-        // not dereference emitters because the parent task is still in its onFinish() callback and may need references to them.
+        // when starting a child task from a parent task handler (e.g. in onFinish()): when the child task is launched, it must
+        // not dereference emitters because the parent task is still in its onFinish() handler and may need references to them.
         private int mReferenceCounter;
 
         // TODO Boolean option to indicate if we should look for emitter or if task is not "managed".
@@ -628,7 +628,7 @@ public class TaskManagerAndroid implements TaskManager {
          * @param pEmitter Effective emitter reference. Must not be null.
          */
         private void lookForParentDescriptor(Field pField, Object pEmitter) {
-            if (TaskCallback.class.isAssignableFrom(pField.getType())) {
+            if (TaskHandler.class.isAssignableFrom(pField.getType())) {
                 TaskDescriptor<?> lDescriptor = mDescriptors.get(pEmitter);
                 if (lDescriptor == null) throw taskExecutedFromUnexecutedTask(pEmitter);
 
@@ -797,7 +797,7 @@ public class TaskManagerAndroid implements TaskManager {
             boolean lRestored = referenceEmitter(pKeepResultOnHold);
             if (!lRestored && pKeepResultOnHold) return false;
 
-            // Run termination callbacks.
+            // Run termination handlers.
             try {
                 if (pThrowable == null) {
                     mTaskResult.onFinish(pResult);

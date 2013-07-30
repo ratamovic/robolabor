@@ -4,8 +4,8 @@ public interface TaskScheduler {
 
     void checkCurrentThread();
 
-    void scheduleCallback(Runnable pCallbackRunnable);
+    void schedule(Runnable pRunnable);
 
-    void scheduleCallbackIfNecessary(Runnable pCallbackRunnable);
+    void scheduleIfNecessary(Runnable pRunnable);
 
 }

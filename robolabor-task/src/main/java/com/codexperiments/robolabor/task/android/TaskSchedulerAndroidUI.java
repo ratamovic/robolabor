@@ -1,11 +1,10 @@
 package com.codexperiments.robolabor.task.android;
 
 import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.mustBeExecutedFromUIThread;
-
-import com.codexperiments.robolabor.task.TaskScheduler;
-
 import android.os.Handler;
 import android.os.Looper;
+
+import com.codexperiments.robolabor.task.TaskScheduler;
 
 public class TaskSchedulerAndroidUI implements TaskScheduler {
     private Handler mUIQueue;
@@ -23,16 +22,16 @@ public class TaskSchedulerAndroidUI implements TaskScheduler {
     }
 
     @Override
-    public void scheduleCallback(Runnable pCallbackRunnable) {
-        mUIQueue.post(pCallbackRunnable);
+    public void schedule(Runnable pRunnable) {
+        mUIQueue.post(pRunnable);
     }
 
     @Override
-    public void scheduleCallbackIfNecessary(Runnable pCallbackRunnable) {
+    public void scheduleIfNecessary(Runnable pRunnable) {
         if (Looper.myLooper() == mUILooper) {
-            pCallbackRunnable.run();
+            pRunnable.run();
         } else {
-            mUIQueue.post(pCallbackRunnable);
+            mUIQueue.post(pRunnable);
         }
     }
 }
