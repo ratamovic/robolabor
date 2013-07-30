@@ -1,7 +1,6 @@
 package com.codexperiments.robolabor.task;
 
 import com.codexperiments.robolabor.task.handler.Task;
-import com.codexperiments.robolabor.task.handler.TaskProgress;
 import com.codexperiments.robolabor.task.handler.TaskResult;
 
 /**
@@ -59,8 +58,9 @@ import com.codexperiments.robolabor.task.handler.TaskResult;
  * appropriately handled).</li>
  * </ul>
  * 
- * During or after processing, several handlers (i.e. callbacks) can be called:
+ * Before, during or after processing, several handlers (i.e. callbacks) can be called:
  * <ul>
+ * <li>onStart()</li>
  * <li>onProgress()</li>
  * <li>onFinish()</li>
  * <li>onFail()</li>
@@ -68,8 +68,7 @@ import com.codexperiments.robolabor.task.handler.TaskResult;
  * Right before and after these handlers are invoked, emitters are respectively referenced and dereferenced to allow accessing the
  * outer class. If outer class is not available (e.g. if Activity has been destroyed but not recreated yet).
  */
-public interface TaskManager
-{
+public interface TaskManager {
     void manage(Object pEmitter);
 
     void unmanage(Object pEmitter);
@@ -80,5 +79,5 @@ public interface TaskManager
 
     <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult);
 
-    void notifyProgress(TaskProgress pProgress);
+    void notifyProgress(/* TaskProgress pProgress */);
 }

@@ -17,7 +17,7 @@ import com.codexperiments.robolabor.task.handler.Task;
 /**
  * Example configuration that handles basic Android components: Activity and Fragments.
  */
-public class TaskManagerConfigAndroid implements TaskManagerConfig
+public class AndroidTaskManagerConfig implements TaskManagerConfig
 {
     private Application mApplication;
     private ExecutorService mSerialExecutor;
@@ -25,7 +25,7 @@ public class TaskManagerConfigAndroid implements TaskManagerConfig
     private Class<?> mFragmentClass;
     private Class<?> mFragmentCompatClass;
 
-    public TaskManagerConfigAndroid(Application pApplication)
+    public AndroidTaskManagerConfig(Application pApplication)
     {
         mApplication = pApplication;
         mSerialExecutor = createExecutors();

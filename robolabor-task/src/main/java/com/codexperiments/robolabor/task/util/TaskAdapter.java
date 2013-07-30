@@ -1,53 +1,45 @@
 package com.codexperiments.robolabor.task.util;
 
-import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.handler.Task;
 import com.codexperiments.robolabor.task.handler.TaskIdentifiable;
+import com.codexperiments.robolabor.task.handler.TaskNotifier;
 import com.codexperiments.robolabor.task.handler.TaskProgress;
 import com.codexperiments.robolabor.task.handler.TaskResult;
 import com.codexperiments.robolabor.task.handler.TaskStart;
 import com.codexperiments.robolabor.task.id.TaskId;
 import com.codexperiments.robolabor.task.id.UniqueTaskId;
 
-public class TaskAdapter<TResult> implements Task<TResult>, TaskResult<TResult>, TaskStart, TaskIdentifiable, TaskProgress
-{
+public class TaskAdapter<TResult> implements Task<TResult>, TaskResult<TResult>, TaskStart, TaskIdentifiable, TaskProgress {
     private TaskId mId;
 
-    public TaskAdapter()
-    {
+    public TaskAdapter() {
         super();
         mId = new UniqueTaskId();
     }
 
     @Override
-    public TaskId getId()
-    {
+    public TaskId getId() {
         return mId;
     }
 
     @Override
-    public void onStart(boolean pIsRestored)
-    {
+    public void onStart(boolean pIsRestored) {
     }
 
     @Override
-    public TResult onProcess(TaskManager pTaskManager) throws Exception
-    {
+    public TResult onProcess(TaskNotifier pNotifier) throws Exception {
         return null;
     }
 
     @Override
-    public void onProgress(TaskManager pTaskManager)
-    {
+    public void onProgress() {
     }
 
     @Override
-    public void onFinish(TaskManager pTaskManager, TResult pResult)
-    {
+    public void onFinish(TResult pResult) {
     }
 
     @Override
-    public void onFail(TaskManager pTaskManager, Throwable pException)
-    {
+    public void onFail(Throwable pException) {
     }
 }

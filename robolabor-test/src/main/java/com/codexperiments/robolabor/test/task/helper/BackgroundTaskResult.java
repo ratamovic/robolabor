@@ -1,17 +1,18 @@
 package com.codexperiments.robolabor.test.task.helper;
 
-import static org.hamcrest.CoreMatchers.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.CoreMatchers.nullValue;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.fail;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.handler.TaskResult;
 
-public class BackgroundTaskResult implements TaskResult<Integer>
-{
+public class BackgroundTaskResult implements TaskResult<Integer> {
     private TaskRef<Integer> mTaskRef;
     private Boolean mCheckEmitterNull;
     private Integer mTaskResult;
@@ -19,13 +20,11 @@ public class BackgroundTaskResult implements TaskResult<Integer>
 
     private CountDownLatch mTaskFinished;
 
-    public BackgroundTaskResult()
-    {
+    public BackgroundTaskResult() {
         this(null);
     }
 
-    public BackgroundTaskResult(Boolean pCheckEmitterNull)
-    {
+    public BackgroundTaskResult(Boolean pCheckEmitterNull) {
         super();
 
         mCheckEmitterNull = pCheckEmitterNull;
@@ -35,8 +34,7 @@ public class BackgroundTaskResult implements TaskResult<Integer>
         mTaskFinished = new CountDownLatch(1);
     }
 
-    public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
-    {
+    public void onFinish(Integer pTaskResult) {
         // Check if outer object reference has been restored (or not).
         if (mCheckEmitterNull != null) {
             if (mCheckEmitterNull) {
@@ -53,15 +51,13 @@ public class BackgroundTaskResult implements TaskResult<Integer>
         mTaskFinished.countDown();
     }
 
-    public void onFail(TaskManager pTaskManager, Throwable pTaskException)
-    {
+    public void onFail(Throwable pTaskException) {
         mTaskException = pTaskException;
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure termination handler is executed only once.
         mTaskFinished.countDown();
     }
 
-    public boolean awaitFinished()
-    {
+    public boolean awaitFinished() {
         try {
             return mTaskFinished.await(BackgroundTask.TASK_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         } catch (InterruptedException eInterruptedException) {
@@ -70,28 +66,23 @@ public class BackgroundTaskResult implements TaskResult<Integer>
         }
     }
 
-    public Integer getTaskResult()
-    {
+    public Integer getTaskResult() {
         return mTaskResult;
     }
 
-    public Throwable getTaskException()
-    {
+    public Throwable getTaskException() {
         return mTaskException;
     }
 
-    protected Boolean getCheckEmitterNull()
-    {
+    protected Boolean getCheckEmitterNull() {
         return mCheckEmitterNull;
     }
 
-    public TaskRef<Integer> getTaskRef()
-    {
+    public TaskRef<Integer> getTaskRef() {
         return mTaskRef;
     }
 
-    public void setTaskRef(TaskRef<Integer> pTaskRef)
-    {
+    public void setTaskRef(TaskRef<Integer> pTaskRef) {
         mTaskRef = pTaskRef;
     }
 
@@ -100,14 +91,12 @@ public class BackgroundTaskResult implements TaskResult<Integer>
      * 
      * @return Task emitter (i.e. the outer class containing the task).
      */
-    public Object getEmitter()
-    {
+    public Object getEmitter() {
         return null;
     }
 
     @Override
-    public String toString()
-    {
+    public String toString() {
         return "BackgroundTask [mTaskResult=" + mTaskResult + ", mTaskException=" + mTaskException + "]";
     }
 }
