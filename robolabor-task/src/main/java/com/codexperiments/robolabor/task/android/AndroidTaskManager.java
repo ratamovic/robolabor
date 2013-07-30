@@ -902,7 +902,7 @@ public class AndroidTaskManager implements TaskManager {
         }
 
         public boolean hasSameId(TaskEmitterId pTaskEmitterId) {
-            return mEmitterId.equals(pTaskEmitterId);
+            return (mEmitterId != null) && mEmitterId.equals(pTaskEmitterId);
         }
 
         public Object get() {
