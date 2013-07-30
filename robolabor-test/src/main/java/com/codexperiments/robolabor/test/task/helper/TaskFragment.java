@@ -10,8 +10,7 @@ import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.test.R;
 import com.codexperiments.robolabor.test.common.TestApplicationContext;
 
-public class TaskFragment extends Fragment
-{
+public class TaskFragment extends Fragment {
     private View mView;
 
     private boolean mCheckEmitterNull;
@@ -21,8 +20,7 @@ public class TaskFragment extends Fragment
     private Integer mTaskResult;
     private Throwable mTaskException;
 
-    public static TaskFragment newInstance(boolean pCheckEmitterNull)
-    {
+    public static TaskFragment newInstance(boolean pCheckEmitterNull) {
         Bundle lBundle = new Bundle();
         lBundle.putBoolean("CheckEmitterNull", pCheckEmitterNull);
 
@@ -32,8 +30,7 @@ public class TaskFragment extends Fragment
     }
 
     @Override
-    public void onCreate(Bundle pBundle)
-    {
+    public void onCreate(Bundle pBundle) {
         super.onCreate(pBundle);
 
         mCheckEmitterNull = getArguments().getBoolean("CheckEmitterNull", false);
@@ -52,86 +49,72 @@ public class TaskFragment extends Fragment
     }
 
     @Override
-    public View onCreateView(LayoutInflater pInflater, ViewGroup pContainer, Bundle pBundle)
-    {
+    public View onCreateView(LayoutInflater pInflater, ViewGroup pContainer, Bundle pBundle) {
         super.onCreateView(pInflater, pContainer, pBundle);
         mView = pInflater.inflate(R.layout.main, pContainer, false);
         return mView;
     }
 
     @Override
-    public void onStart()
-    {
+    public void onStart() {
         super.onStart();
         mTaskManager.manage(this);
     }
 
     @Override
-    public void onStop()
-    {
+    public void onStop() {
         super.onStop();
         mTaskManager.unmanage(this);
     }
 
     @Override
-    public void onSaveInstanceState(Bundle pBundle)
-    {
+    public void onSaveInstanceState(Bundle pBundle) {
         super.onSaveInstanceState(pBundle);
         pBundle.putSerializable("TaskResult", mTaskResult);
     }
 
-    public BackgroundTask runInnerTask(final Integer pTaskResult)
-    {
+    public BackgroundTask runInnerTask(final Integer pTaskResult) {
         final BackgroundTask lInnerBackgroundTask = new InnerBackgroundTask(pTaskResult, mCheckEmitterNull, mStepByStep);
         getActivity().runOnUiThread(new Runnable() {
-            public void run()
-            {
+            public void run() {
                 mTaskManager.execute(lInnerBackgroundTask);
             }
         });
         return lInnerBackgroundTask;
     }
 
-    public Integer getTaskResult()
-    {
+    public Integer getTaskResult() {
         return mTaskResult;
     }
 
-    public Throwable getTaskException()
-    {
+    public Throwable getTaskException() {
         return mTaskException;
     }
 
-
-    private class InnerBackgroundTask extends BackgroundTask
-    {
-        public InnerBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep)
-        {
+    private class InnerBackgroundTask extends BackgroundTask {
+        public InnerBackgroundTask(Integer pTaskResult, Boolean pCheckOwnerIsNull, boolean pStepByStep) {
             super(pTaskResult, pCheckOwnerIsNull, pStepByStep);
         }
 
         @Override
-        public Object getEmitter()
-        {
+        public Object getEmitter() {
             return TaskFragment.this;
         }
 
         @Override
-        public void onFinish(TaskManager pTaskManager, Integer pTaskResult)
-        {
+        public void onFinish(Integer pTaskResult) {
             if (getEmitter() != null) {
                 mTaskResult = pTaskResult;
             }
-            super.onFinish(pTaskManager, pTaskResult);
+            super.onFinish(pTaskResult);
         }
 
         @Override
-        public void onFail(TaskManager pTaskManager, Throwable pTaskException)
-        {
+        public void onFail(Throwable pTaskException) {
             if (getEmitter() != null) {
                 mTaskException = pTaskException;
             }
-            super.onFail(pTaskManager, pTaskException);
+            super.onFail(pTaskException);
         }
     }
 }

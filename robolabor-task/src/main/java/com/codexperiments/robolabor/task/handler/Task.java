@@ -1,9 +1,6 @@
 package com.codexperiments.robolabor.task.handler;
 
-import com.codexperiments.robolabor.task.TaskManager;
-
-public interface Task<TResult> extends TaskResult<TResult>
-{
+public interface Task<TResult> extends TaskResult<TResult> {
     /**
      * Execute the background task. The following points should be imperatively respected:
      * <ul>
@@ -18,5 +15,5 @@ public interface Task<TResult> extends TaskResult<TResult>
      * 
      * @throws Exception If any exception occurs during processing. The exception is forwarded to TaskResult.onFail() if defined.
      */
-    TResult onProcess(TaskManager pTaskManager) throws Exception;
+    TResult onProcess(/* TaskManager pTaskManager */TaskNotifier pNotifier) throws Exception;
 }
