@@ -240,6 +240,7 @@ public class AndroidTaskManager implements TaskManager {
         private final TaskRef<TResult> mTaskRef;
         private final TaskId mTaskId;
         private final TaskScheduler mScheduler;
+        private final TaskManagerConfig mConfig;
 
         // Task result and state.
         private TResult mResult;
@@ -372,9 +373,8 @@ public class AndroidTaskManager implements TaskManager {
             if (mTaskRef.equals(pTaskRef)) {
                 final TaskDescriptor<TResult> lDescriptor = new TaskDescriptor<TResult>(pTaskResult);
                 mDescriptor = lDescriptor;
-
                 restore(lDescriptor);
-
+                // Save the descriptor so that any child task can use current descriptor as a parent.
                 mDescriptors.put(pTaskResult, lDescriptor); // TODO Check for optim
             }
         }
@@ -474,7 +474,7 @@ public class AndroidTaskManager implements TaskManager {
      * called, the content of this class is not modified anymore (except the emitter and the reference counter dedicated to
      * referencing and dereferencing).
      */
-    private final class TaskDescriptor<TResult> {
+    private class TaskDescriptor<TResult> {
         private final TaskResult<TResult> mTaskResult;
         private List<TaskEmitterDescriptor> mEmitterDescriptors; // Never modified once initialized in prepareDescriptor().
         private List<TaskDescriptor<?>> mParentDescriptors; // Never modified once initialized in prepareDescriptor().
