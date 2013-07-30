@@ -119,6 +119,8 @@ public class TaskManagerAndroid implements TaskManager {
         // Typically, this could occur for example if an Activity X starts and then navigates to an Activity B which is,
         // according to Android lifecycle, started before A is stopped (the two activities are alive at the same time during a
         // short period of time).
+        // TODO (lEmitterRef.get() == pEmitter) is not a proper way to handle unmanage() when dealing with activities since this
+        // can lead to concurrency defects. It would be better to force call to unmanage().
         Object lEmitterIdValue = mConfig.resolveEmitterId(pEmitter);
         if (lEmitterIdValue != null) {
             TaskEmitterId lEmitterId = new TaskEmitterId(pEmitter.getClass(), lEmitterIdValue);
@@ -356,7 +358,8 @@ public class TaskManagerAndroid implements TaskManager {
          */
         public void manage(TaskEmitterId pEmitterId) {
             final TaskDescriptor<TResult> lDescriptor = mDescriptor;
-            if (lDescriptor.usesEmitter(pEmitterId)) {
+            // Note that descriptor can be null if container has been added to the global list but hasn't been prepared yet.
+            if ((lDescriptor != null) && lDescriptor.usesEmitter(pEmitterId)) {
                 restore(lDescriptor);
             }
         }
@@ -558,12 +561,23 @@ public class TaskManagerAndroid implements TaskManager {
                 // If reference is null, that means the emitter is probably used in a parent container and already managed.
                 // Try to find its Id in parent containers.
                 else {
-                    lEmitterRef = resolveRefInParentContainers(pField);
+                    // Not sure there is a problem here. The list of parent descriptors should be entirely created before to be
+                    // sure we can properly resolve reference. However this$x fields are processed from child class to super
+                    // classes. My guess is that top-most child class will always have its outer reference filled, which itself
+                    // will point to parent outer objects. And if one of the outer reference is created explicitly through a
+                    // "myOuter.new Inner()", well the outer class reference myOuter cannot be null or a NullPointerException is
+                    // thrown by the Java language anyway. But that remains late-night suppositions... Anyway if it doesn't work
+                    // it probably means you're just writing really bad code so just stop it please! Note that this whole case can
+                    // occur only when onFinish() is called with keepResultOnHold option set to false (in which case referencing
+                    // is not guaranteed be fully applied).
+                    lEmitterRef = resolveRefInParentDescriptors(pField);
                 }
 
                 if (lEmitterRef != null) {
                     mEmitterDescriptors.add(new TaskEmitterDescriptor(pField, lEmitterRef));
                 } else {
+                    // Maybe this is too brutal and we should do nothing, hoping that no access will be made. But for the moment I
+                    // really think this case should never happen under normal conditions. See the big paragraph above...
                     throw emitterIdCouldNotBeDetermined(mTaskResult);
                 }
             } catch (IllegalArgumentException eIllegalArgumentException) {
@@ -580,7 +594,7 @@ public class TaskManagerAndroid implements TaskManager {
          * @param pField Emitter field.
          * @return
          */
-        private TaskEmitterRef resolveRefInParentContainers(Field pField) {
+        private TaskEmitterRef resolveRefInParentDescriptors(Field pField) {
             if (mParentDescriptors != null) {
                 for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
                     TaskEmitterRef lEmitterRef;
@@ -591,7 +605,7 @@ public class TaskManagerAndroid implements TaskManager {
                         if (lEmitterRef != null) return lEmitterRef;
                     }
 
-                    lEmitterRef = lParentDescriptor.resolveRefInParentContainers(pField);
+                    lEmitterRef = lParentDescriptor.resolveRefInParentDescriptors(pField);
                     if (lEmitterRef != null) return lEmitterRef;
                 }
             }
@@ -623,7 +637,7 @@ public class TaskManagerAndroid implements TaskManager {
                     while (lTaskResultClass != Object.class) {
                         // If current class is an inner class...
                         if ((lTaskResultClass.getEnclosingClass() != null) && !Modifier.isStatic(lTaskResultClass.getModifiers())) {
-                            // Find parent emitter references and their corresponding descriptors.
+                            // Find all parent emitter references and their corresponding descriptors.
                             for (Field lField : lTaskResultClass.getDeclaredFields()) {
                                 if (lField.getName().startsWith("this$")) {
                                     lField.setAccessible(true);
@@ -631,9 +645,16 @@ public class TaskManagerAndroid implements TaskManager {
                                     if (lParentEmitter != null) {
                                         lookForParentDescriptor(lField, lParentEmitter);
                                     } else {
-                                        // TODO Problem here.
-                                        // TaskEmitterRef lEmitterRef = findEmitterRefInParentContainers(lField);
-                                        // mParentDescriptors.add(lEmitterRef.mEmitterRef.);
+                                        // Look for the big comment in prepareEmitterField(). Here we try to check the whole
+                                        // hierarchy of parent this$x to look for parent descriptors (not only this$x for the
+                                        // handler class and its super classes). In this case, if we get a null, I really think we
+                                        // are stuck if there is a Task handler and its associated descriptor hidden deeper behind
+                                        // this null reference. Basically we can do nothing against this except maybe a warning as
+                                        // code may still be correct if the null reference just hides e.g. a managed object (e.g.
+                                        // an Activity). That's why an exception would be too brutal. User will get a
+                                        // NullPointerException anyway if he try to go through such a reference. Again note that
+                                        // this whole case can occur only when onFinish() is called with keepResultOnHold option
+                                        // set to false (in which case referencing is not guaranteed be fully applied).
                                     }
                                     // There should be only one outer reference per "class" in the Task class hierarchy. So we can
                                     // stop as soon as the field is found as there won't be another.
@@ -674,6 +695,10 @@ public class TaskManagerAndroid implements TaskManager {
             if (lRestored) {
                 synchronized (this) {
                     try {
+                        // TODO There is a race problem in this code. A TaskEmitterRef can be used several times for one
+                        // TaskDescriptor because of parent or superclass emitters ref that may be identical. In that case, a call
+                        // to manage() on another thread during referenceEmitter() may cause two different emitters to be restored
+                        // whereas we would expect the same ref.
                         if ((mReferenceCounter++) == 0) {
                             for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
                                 lRestored &= lEmitterDescriptor.reference(mTaskResult);
