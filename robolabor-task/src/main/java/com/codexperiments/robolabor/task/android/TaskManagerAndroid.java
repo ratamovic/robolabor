@@ -16,6 +16,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -214,7 +215,7 @@ public class TaskManagerAndroid implements TaskManager {
         }
         // Unmanaged emitter case.
         else {
-            if (mConfig.allowUnmanagedEmitters()) throw unmanagedEmittersNotAllowed(pEmitter);
+            if (!mConfig.allowUnmanagedEmitters()) throw unmanagedEmittersNotAllowed(pEmitter);
             // TODO This is wrong! There should be only one TaskEmitterRef per emitter or concurrency problems may occur.
             lEmitterRef = new TaskEmitterRef(pEmitter);
         }
@@ -678,45 +679,52 @@ public class TaskManagerAndroid implements TaskManager {
          * case, any set reference is rolled-back and dereferenceEmitter() shouldn't be called. But if referencing succeeds, then
          * dereferenceEmitter() MUST be called eventually (preferably using a finally block).
          * 
-         * @param pContainer Container that contains the task to restore.
+         * @param pRollbackOnFailure True to cancel referencing if one of the emitter cannot be restored, or false if partial
+         *            referencing is allowed.
          * @return True if restoration was performed properly. This may be false if a previously managed object become unmanaged
          *         meanwhile.
          */
-        private boolean referenceEmitter() {
+        private boolean referenceEmitter(boolean pRollbackOnFailure) {
             // Try to restore emitters in parent containers first. Everything is rolled-back if referencing fails.
-            boolean lRestored = true;
             if (mParentDescriptors != null) {
                 for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
-                    lRestored &= lParentDescriptor.referenceEmitter();
+                    if (!lParentDescriptor.referenceEmitter(pRollbackOnFailure)) return false;
                 }
             }
 
             // Restore references for current container if referencing succeeded previously.
-            if (lRestored) {
-                synchronized (this) {
-                    try {
-                        // TODO There is a race problem in this code. A TaskEmitterRef can be used several times for one
-                        // TaskDescriptor because of parent or superclass emitters ref that may be identical. In that case, a call
-                        // to manage() on another thread during referenceEmitter() may cause two different emitters to be restored
-                        // whereas we would expect the same ref.
-                        if ((mReferenceCounter++) == 0) {
-                            for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                                lRestored &= lEmitterDescriptor.reference(mTaskResult);
+            synchronized (this) {
+                try {
+                    // TODO There is a race problem in this code. A TaskEmitterRef can be used several times for one
+                    // TaskDescriptor because of parent or superclass emitters ref that may be identical. In that case, a call
+                    // to manage() on another thread during referenceEmitter() may cause two different emitters to be restored
+                    // whereas we would expect the same ref.
+                    if ((mReferenceCounter++) == 0) {
+                        for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                            if (!lEmitterDescriptor.reference(mTaskResult) && pRollbackOnFailure) {
+                                // Rollback modifications in case of failure
+                                TaskEmitterDescriptor lRolledEmitterDescriptor;
+                                Iterator<TaskEmitterDescriptor> i = mEmitterDescriptors.iterator();
+                                while (i.hasNext() && ((lRolledEmitterDescriptor = i.next()) != lEmitterDescriptor)) {
+                                    lRolledEmitterDescriptor.dereference(mTaskResult);
+                                }
+                                --mReferenceCounter;
+                                return false;
                             }
                         }
                     }
-                    // Note: Rollback any modifications if an exception occurs. Having an exception here denotes an internal bug.
-                    catch (TaskManagerException eTaskManagerException) {
-                        // Note that this may theoretically fail too. In that case, we may be completely stuck with an invalid
-                        // internal state. However, such a case happen, we can hope the problem will happen at the same point in
-                        // both referenceEmitter() and dereferenceEmitter() (more specifically when accessing fields by
-                        // reflection). In that case, integrity will be hopefully preserved.
-                        dereferenceEmitter();
-                        throw eTaskManagerException;
-                    }
+                }
+                // Note: Rollback any modifications if an exception occurs. Having an exception here denotes an internal bug.
+                catch (TaskManagerException eTaskManagerException) {
+                    // Note that this may theoretically fail too. In that case, we may be completely stuck with an invalid
+                    // internal state. However, such a case happen, we can hope the problem will happen at the same point in
+                    // both referenceEmitter() and dereferenceEmitter() (more specifically when accessing fields by
+                    // reflection). In that case, integrity will be hopefully preserved.
+                    dereferenceEmitter();
+                    throw eTaskManagerException;
                 }
             }
-            return lRestored;
+            return true;
         }
 
         /**
@@ -746,7 +754,7 @@ public class TaskManagerAndroid implements TaskManager {
 
         public void onStart(boolean pIsRestored) {
             if (mTaskResult instanceof TaskStart) {
-                if (referenceEmitter()) {
+                if (referenceEmitter(true)) {
                     try {
                         ((TaskStart) mTaskResult).onStart(pIsRestored);
                     } catch (RuntimeException eRuntimeException) {
@@ -760,7 +768,7 @@ public class TaskManagerAndroid implements TaskManager {
 
         public void onProgress() {
             if (mTaskResult instanceof TaskProgress) {
-                if (referenceEmitter()) {
+                if (referenceEmitter(true)) {
                     try {
                         ((TaskProgress) mTaskResult).onProgress();
                     } catch (RuntimeException eRuntimeException) {
@@ -774,14 +782,8 @@ public class TaskManagerAndroid implements TaskManager {
 
         public boolean onFinish(TResult pResult, Throwable pThrowable, boolean pKeepResultOnHold) {
             // A task can be considered finished only if referencing succeed or if an option allows bypassing referencing failure.
-            boolean lRestored = true;
-            if (!referenceEmitter()) {
-                if (pKeepResultOnHold) {
-                    return false;
-                } else {
-                    lRestored = false;
-                }
-            }
+            boolean lRestored = referenceEmitter(pKeepResultOnHold);
+            if (!lRestored && pKeepResultOnHold) return false;
 
             // Run termination callbacks.
             try {

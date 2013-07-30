@@ -55,13 +55,10 @@ public class TaskActivity extends FragmentActivity {
             mTaskResult = null;
             mTaskException = null;
 
-            getSupportFragmentManager().beginTransaction() //
+            getSupportFragmentManager().beginTransaction()
                                        .add(0, TaskFragment.newInstance(mCheckEmitterNull), "uniquetag")
-                                       //
                                        .replace(R.id.activity_content, TaskFragment.newInstance(mCheckEmitterNull))
-                                       //
                                        .add(0, TaskFragment.newInstance(false))
-                                       //
                                        .commit();
         } else {
             mTaskResult = (Integer) pBundle.getSerializable("TaskResult");

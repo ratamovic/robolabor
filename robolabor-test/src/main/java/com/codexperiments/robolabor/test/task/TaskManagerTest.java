@@ -15,7 +15,6 @@ import com.codexperiments.robolabor.task.TaskManagerException;
 import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
 import com.codexperiments.robolabor.task.android.TaskManagerConfigAndroid;
-import com.codexperiments.robolabor.task.android.TaskManagerServiceAndroid;
 import com.codexperiments.robolabor.task.handler.Task;
 import com.codexperiments.robolabor.task.handler.TaskNotifier;
 import com.codexperiments.robolabor.task.handler.TaskResult;
@@ -372,7 +371,6 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
     }
 
     public void testExecute_progress_persisting() throws InterruptedException {
-        assertThat(isServiceRunning(TaskManagerServiceAndroid.class), equalTo(false)); // TODO Check service somewhere else.
         TaskActivity lInitialActivity = getActivity(TaskActivity.stepByStep());
         BackgroundTask lTask = lInitialActivity.runInnerTask(mTaskResult);
 
@@ -381,19 +379,16 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
         assertThat(lTask.awaitProgressExecuted(), equalTo(true));
         assertThat(lTask.getProgressCounter(), equalTo(1));
 
-        assertThat(isServiceRunning(TaskManagerServiceAndroid.class), equalTo(true));
         assertThat(lTask.awaitStepExecuted(), equalTo(true));
         assertThat(lTask.awaitProgressExecuted(), equalTo(true));
         assertThat(lTask.getProgressCounter(), equalTo(2));
 
-        assertThat(isServiceRunning(TaskManagerServiceAndroid.class), equalTo(true));
         assertThat(lTask.awaitStepExecuted(), equalTo(true));
         assertThat(lTask.awaitProgressExecuted(), equalTo(true));
         assertThat(lTask.getProgressCounter(), equalTo(3));
 
         // Finish the task. Since all progress notifications have been processed, no more notifications happen.
         assertThat(lTask.awaitFinished(), equalTo(true));
-        assertThat(isServiceRunning(TaskManagerServiceAndroid.class), equalTo(false));
         assertThat(lInitialActivity.getTaskResult(), equalTo(mTaskResult));
         assertThat(lInitialActivity.getTaskException(), nullValue());
         assertThat(lTask.getProgressCounter(), equalTo(3));

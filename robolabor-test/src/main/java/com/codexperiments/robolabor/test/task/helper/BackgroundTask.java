@@ -80,7 +80,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
 
             Thread.sleep(TASK_STEP_DURATION_MS);
             ++mStepCounter;
-            pNotifier.notifyProgress(/* this */);
+            pNotifier.notifyProgress();
             notifyEnded();
         }
         if (mExpectedTaskException == null) {
