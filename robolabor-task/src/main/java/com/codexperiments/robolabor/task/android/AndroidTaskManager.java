@@ -1,14 +1,14 @@
 package com.codexperiments.robolabor.task.android;
 
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.emitterIdCouldNotBeDetermined;
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.emitterNotManaged;
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.innerTasksNotAllowed;
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.internalError;
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.invalidEmitterId;
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.notCalledFromTask;
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.progressCalledAfterTaskFinished;
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.taskExecutedFromUnexecutedTask;
-import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.unmanagedEmittersNotAllowed;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.emitterIdCouldNotBeDetermined;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.emitterNotManaged;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.innerTasksNotAllowed;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.internalError;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.invalidEmitterId;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.notCalledFromTask;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.progressCalledAfterTaskFinished;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.taskExecutedFromUnexecutedTask;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.unmanagedEmittersNotAllowed;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
@@ -49,7 +49,7 @@ import com.codexperiments.robolabor.task.util.AutoCleanMap;
  * 
  * TODO pending(TaskType)
  */
-public class TaskManagerAndroid implements TaskManager {
+public class AndroidTaskManager implements TaskManager {
     private static final int DEFAULT_CAPACITY = 64;
     // To generate task references.
     private static int TASK_REF_COUNTER;
@@ -70,10 +70,10 @@ public class TaskManagerAndroid implements TaskManager {
         TASK_REF_COUNTER = Integer.MIN_VALUE;
     }
 
-    public TaskManagerAndroid(Application pApplication, TaskManagerConfig pConfig) {
+    public AndroidTaskManager(Application pApplication, TaskManagerConfig pConfig) {
         super();
 
-        mDefaultScheduler = new TaskSchedulerAndroidUI();
+        mDefaultScheduler = new AndroidUITaskScheduler();
         mConfig = pConfig;
         mContainers = Collections.newSetFromMap(new ConcurrentHashMap<TaskContainer<?>, Boolean>(DEFAULT_CAPACITY));
         mEmitters = new ConcurrentHashMap<TaskEmitterId, TaskEmitterRef>(DEFAULT_CAPACITY);
@@ -635,7 +635,7 @@ public class TaskManagerAndroid implements TaskManager {
                 if (mParentDescriptors == null) {
                     // A task will have most of the time no parents. Hence lazy-initialization. But if that's not the case, then a
                     // task will usually have only one parent, rarely more. Hence a capacity of 1.
-                    mParentDescriptors = new ArrayList<TaskManagerAndroid.TaskDescriptor<?>>(1);
+                    mParentDescriptors = new ArrayList<AndroidTaskManager.TaskDescriptor<?>>(1);
                 }
                 mParentDescriptors.add(lDescriptor);
             } else {
@@ -722,7 +722,7 @@ public class TaskManagerAndroid implements TaskManager {
                         }
                     }
                     // Note: Rollback any modifications if an exception occurs. Having an exception here denotes an internal bug.
-                    catch (TaskManagerAndroidException eTaskManagerAndroidException) {
+                    catch (AndroidTaskManagerException eTaskManagerAndroidException) {
                         --mReferenceCounter;
                         // Note that if referencing failed at some point, dereferencing is likely to fail too. That's not a big
                         // issue since an exception will be thrown in both cases anyway.

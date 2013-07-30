@@ -11,10 +11,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import android.test.UiThreadTest;
 
 import com.codexperiments.robolabor.task.TaskManagerConfig;
-import com.codexperiments.robolabor.task.TaskManagerException;
 import com.codexperiments.robolabor.task.TaskRef;
-import com.codexperiments.robolabor.task.android.TaskManagerAndroid;
-import com.codexperiments.robolabor.task.android.TaskManagerConfigAndroid;
+import com.codexperiments.robolabor.task.android.AndroidTaskManager;
+import com.codexperiments.robolabor.task.android.AndroidTaskManagerConfig;
+import com.codexperiments.robolabor.task.android.AndroidTaskManagerException;
 import com.codexperiments.robolabor.task.handler.Task;
 import com.codexperiments.robolabor.task.handler.TaskNotifier;
 import com.codexperiments.robolabor.task.handler.TaskResult;
@@ -35,7 +35,7 @@ import com.codexperiments.robolabor.test.task.helper.TaskFragment;
 public class TaskManagerTest extends TestCase<TaskActivity> {
     private Integer mTaskId;
     private Integer mTaskResult;
-    private TaskManagerAndroid mTaskManager;
+    private AndroidTaskManager mTaskManager;
 
     public TaskManagerTest() {
         super(TaskActivity.class);
@@ -60,8 +60,8 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
     @Override
     protected void setUpOnUIThread() throws Exception {
         super.setUpOnUIThread();
-        TaskManagerConfig lConfig = new TaskManagerConfigAndroid(getApplication());
-        mTaskManager = new TaskManagerAndroid(getApplication(), lConfig);
+        TaskManagerConfig lConfig = new AndroidTaskManagerConfig(getApplication());
+        mTaskManager = new AndroidTaskManager(getApplication(), lConfig);
         getApplicationContext().registerManager(mTaskManager);
     }
 
@@ -361,7 +361,7 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
                 try {
                     mTaskManager.execute(lTask);
                     fail();
-                } catch (TaskManagerException eTaskManagerException) {
+                } catch (AndroidTaskManagerException eAndroidTaskManagerException) {
                     lFailure.set(true);
                 }
             }
@@ -597,28 +597,28 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
                 }
             });
             fail();
-        } catch (TaskManagerException eTaskManagerException) {
+        } catch (AndroidTaskManagerException eAndroidTaskManagerException) {
             // Success
         }
 
         try {
             mTaskManager.rebind(new TaskRef<Integer>(0), new BackgroundTaskResult());
             fail();
-        } catch (TaskManagerException eTaskManagerException) {
+        } catch (AndroidTaskManagerException eAndroidTaskManagerException) {
             // Success
         }
 
         try {
             mTaskManager.manage(new Object());
             fail();
-        } catch (TaskManagerException eTaskManagerException) {
+        } catch (AndroidTaskManagerException eAndroidTaskManagerException) {
             // Success
         }
 
         try {
             mTaskManager.unmanage(new Object());
             fail();
-        } catch (TaskManagerException eTaskManagerException) {
+        } catch (AndroidTaskManagerException eAndroidTaskManagerException) {
             // Success
         }
     }
@@ -629,7 +629,7 @@ public class TaskManagerTest extends TestCase<TaskActivity> {
                                          * new TaskProgress() { public void onProgress(TaskManager pTaskManager) { } }
                                          */);
             fail();
-        } catch (TaskManagerException eTaskManagerException) {
+        } catch (AndroidTaskManagerException eAndroidTaskManagerException) {
             // Success
         }
     }
