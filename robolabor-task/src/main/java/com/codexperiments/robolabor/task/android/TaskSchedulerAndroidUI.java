@@ -1,6 +1,6 @@
 package com.codexperiments.robolabor.task.android;
 
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.mustBeExecutedFromUIThread;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.mustBeExecutedFromUIThread;
 
 import com.codexperiments.robolabor.task.TaskScheduler;
 

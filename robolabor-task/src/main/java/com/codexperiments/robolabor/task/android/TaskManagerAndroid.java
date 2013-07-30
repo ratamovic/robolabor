@@ -1,22 +1,20 @@
 package com.codexperiments.robolabor.task.android;
 
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.emitterIdCouldNotBeDetermined;
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.emitterNotManaged;
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.innerTasksNotAllowed;
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.internalError;
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.invalidEmitterId;
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.notCalledFromTask;
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.progressCalledAfterTaskFinished;
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.taskExecutedFromUnexecutedTask;
-import static com.codexperiments.robolabor.task.android.TaskManagerExceptionAndroid.unmanagedEmittersNotAllowed;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.emitterIdCouldNotBeDetermined;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.emitterNotManaged;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.innerTasksNotAllowed;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.internalError;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.invalidEmitterId;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.notCalledFromTask;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.progressCalledAfterTaskFinished;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.taskExecutedFromUnexecutedTask;
+import static com.codexperiments.robolabor.task.android.TaskManagerAndroidException.unmanagedEmittersNotAllowed;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,7 +24,6 @@ import android.app.Application;
 
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskManagerConfig;
-import com.codexperiments.robolabor.task.TaskManagerException;
 import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.TaskScheduler;
 import com.codexperiments.robolabor.task.handler.Task;
@@ -479,17 +476,18 @@ public class TaskManagerAndroid implements TaskManager {
      */
     private final class TaskDescriptor<TResult> {
         private final TaskResult<TResult> mTaskResult;
-        private final List<TaskEmitterDescriptor> mEmitterDescriptors;
-        private Set<TaskDescriptor<?>> mParentDescriptors; // Not final because lazy-initialized.
+        private List<TaskEmitterDescriptor> mEmitterDescriptors; // Never modified once initialized in prepareDescriptor().
+        private List<TaskDescriptor<?>> mParentDescriptors; // Never modified once initialized in prepareDescriptor().
         // Counts the number of time a task has been referenced without being dereferenced. A task will be dereferenced only when
         // this counter reaches 0, which means that no other task needs references to be set. This situation can occur for example
         // when starting a child task from a parent task callback (e.g. in onFinish()): when the child task is launched, it must
         // not dereference emitters because the parent task is still in its onFinish() callback and may need references to them.
         private int mReferenceCounter;
 
+        // TODO Boolean option to indicate if we should look for emitter or if task is not "managed".
         public TaskDescriptor(TaskResult<TResult> pTaskResult) {
             mTaskResult = pTaskResult;
-            mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1); // Most of the time, a task will have only one emitter.
+            mEmitterDescriptors = null;
             mParentDescriptors = null;
             mReferenceCounter = 0;
 
@@ -501,7 +499,7 @@ public class TaskManagerAndroid implements TaskManager {
         }
 
         public boolean usesEmitter(TaskEmitterId pEmitterId) {
-            if (mTaskResult instanceof TaskStart) {
+            if (mEmitterDescriptors != null) {
                 for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
                     if (lEmitterDescriptor.usesEmitter(pEmitterId)) {
                         return true;
@@ -535,8 +533,10 @@ public class TaskManagerAndroid implements TaskManager {
                     lTaskResultClass = lTaskResultClass.getSuperclass();
                 }
             } finally {
-                for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                    lEmitterDescriptor.dereference(mTaskResult);
+                if (mEmitterDescriptors != null) {
+                    for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                        lEmitterDescriptor.dereference(mTaskResult);
+                    }
                 }
             }
         }
@@ -575,6 +575,10 @@ public class TaskManagerAndroid implements TaskManager {
                 }
 
                 if (lEmitterRef != null) {
+                    if (mEmitterDescriptors == null) {
+                        // Most of the time, a task will have only one emitter. Hence a capacity of 1.
+                        mEmitterDescriptors = new ArrayList<TaskEmitterDescriptor>(1);
+                    }
                     mEmitterDescriptors.add(new TaskEmitterDescriptor(pField, lEmitterRef));
                 } else {
                     // Maybe this is too brutal and we should do nothing, hoping that no access will be made. But for the moment I
@@ -599,11 +603,14 @@ public class TaskManagerAndroid implements TaskManager {
             if (mParentDescriptors != null) {
                 for (TaskDescriptor<?> lParentDescriptor : mParentDescriptors) {
                     TaskEmitterRef lEmitterRef;
-                    for (TaskEmitterDescriptor lParentEmitterDescriptor : lParentDescriptor.mEmitterDescriptors) {
-                        // We have found the right ref if its field has the same type than the field of the emitter we look for.
-                        // I turned my mind upside-down but this seems to work.
-                        lEmitterRef = lParentEmitterDescriptor.hasSameType(pField);
-                        if (lEmitterRef != null) return lEmitterRef;
+                    if (mEmitterDescriptors != null) {
+                        for (TaskEmitterDescriptor lParentEmitterDescriptor : lParentDescriptor.mEmitterDescriptors) {
+                            // We have found the right ref if its field has the same type than the field of the emitter we look
+                            // for.
+                            // I turned my mind upside-down but this seems to work.
+                            lEmitterRef = lParentEmitterDescriptor.hasSameType(pField);
+                            if (lEmitterRef != null) return lEmitterRef;
+                        }
                     }
 
                     lEmitterRef = lParentDescriptor.resolveRefInParentDescriptors(pField);
@@ -628,7 +635,7 @@ public class TaskManagerAndroid implements TaskManager {
                 if (mParentDescriptors == null) {
                     // A task will have most of the time no parents. Hence lazy-initialization. But if that's not the case, then a
                     // task will usually have only one parent, rarely more. Hence a capacity of 1.
-                    mParentDescriptors = new HashSet<TaskManagerAndroid.TaskDescriptor<?>>(1);
+                    mParentDescriptors = new ArrayList<TaskManagerAndroid.TaskDescriptor<?>>(1);
                 }
                 mParentDescriptors.add(lDescriptor);
             } else {
@@ -693,35 +700,37 @@ public class TaskManagerAndroid implements TaskManager {
             }
 
             // Restore references for current container if referencing succeeded previously.
-            synchronized (this) {
-                try {
-                    // TODO There is a race problem in this code. A TaskEmitterRef can be used several times for one
-                    // TaskDescriptor because of parent or superclass emitters ref that may be identical. In that case, a call
-                    // to manage() on another thread during referenceEmitter() may cause two different emitters to be restored
-                    // whereas we would expect the same ref.
-                    if ((mReferenceCounter++) == 0) {
-                        for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                            if (!lEmitterDescriptor.reference(mTaskResult) && pRollbackOnFailure) {
-                                // Rollback modifications in case of failure
-                                TaskEmitterDescriptor lRolledEmitterDescriptor;
-                                Iterator<TaskEmitterDescriptor> i = mEmitterDescriptors.iterator();
-                                while (i.hasNext() && ((lRolledEmitterDescriptor = i.next()) != lEmitterDescriptor)) {
-                                    lRolledEmitterDescriptor.dereference(mTaskResult);
+            if (mEmitterDescriptors != null) {
+                synchronized (this) {
+                    try {
+                        // TODO There is a race problem in this code. A TaskEmitterRef can be used several times for one
+                        // TaskDescriptor because of parent or superclass emitters ref that may be identical. In that case, a call
+                        // to manage() on another thread during referenceEmitter() may cause two different emitters to be restored
+                        // whereas we would expect the same ref.
+                        if ((mReferenceCounter++) == 0) {
+                            for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                                if (!lEmitterDescriptor.reference(mTaskResult) && pRollbackOnFailure) {
+                                    // Rollback modifications in case of failure.
+                                    --mReferenceCounter;
+                                    for (TaskEmitterDescriptor lRolledEmitterDescriptor : mEmitterDescriptors) {
+                                        if (lRolledEmitterDescriptor == lEmitterDescriptor) break;
+                                        lRolledEmitterDescriptor.dereference(mTaskResult);
+                                    }
+                                    return false;
                                 }
-                                --mReferenceCounter;
-                                return false;
                             }
                         }
                     }
-                }
-                // Note: Rollback any modifications if an exception occurs. Having an exception here denotes an internal bug.
-                catch (TaskManagerException eTaskManagerException) {
-                    // Note that this may theoretically fail too. In that case, we may be completely stuck with an invalid
-                    // internal state. However, such a case happen, we can hope the problem will happen at the same point in
-                    // both referenceEmitter() and dereferenceEmitter() (more specifically when accessing fields by
-                    // reflection). In that case, integrity will be hopefully preserved.
-                    dereferenceEmitter();
-                    throw eTaskManagerException;
+                    // Note: Rollback any modifications if an exception occurs. Having an exception here denotes an internal bug.
+                    catch (TaskManagerAndroidException eTaskManagerAndroidException) {
+                        --mReferenceCounter;
+                        // Note that if referencing failed at some point, dereferencing is likely to fail too. That's not a big
+                        // issue since an exception will be thrown in both cases anyway.
+                        for (TaskEmitterDescriptor lRolledEmitterDescriptor : mEmitterDescriptors) {
+                            lRolledEmitterDescriptor.dereference(mTaskResult);
+                        }
+                        throw eTaskManagerAndroidException;
+                    }
                 }
             }
             return true;
@@ -741,12 +750,15 @@ public class TaskManagerAndroid implements TaskManager {
                 }
             }
 
-            synchronized (this) {
-                // Note: No need to rollback modifications if an exception occur. Leave references as is, thus creating a memory
-                // leak. We can't do much about it since having an exception here denotes an internal bug.
-                if ((--mReferenceCounter) == 0) {
-                    for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                        lEmitterDescriptor.dereference(mTaskResult);
+            if (mEmitterDescriptors != null) {
+                synchronized (this) {
+                    // Note: No need to rollback modifications if an exception occur. Leave references as is, thus creating a
+                    // memory
+                    // leak. We can't do much about it since having an exception here denotes an internal bug.
+                    if ((--mReferenceCounter) == 0) {
+                        for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                            lEmitterDescriptor.dereference(mTaskResult);
+                        }
                     }
                 }
             }
