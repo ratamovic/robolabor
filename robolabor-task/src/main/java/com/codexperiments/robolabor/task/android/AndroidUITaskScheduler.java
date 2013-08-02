@@ -1,6 +1,5 @@
 package com.codexperiments.robolabor.task.android;
 
-import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.mustBeExecutedFromUIThread;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -14,11 +13,6 @@ public class AndroidUITaskScheduler implements TaskScheduler {
         super();
         mUILooper = Looper.getMainLooper();
         mUIQueue = new Handler(mUILooper);
-    }
-
-    @Override
-    public void checkCurrentThread() {
-        if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
     }
 
     @Override

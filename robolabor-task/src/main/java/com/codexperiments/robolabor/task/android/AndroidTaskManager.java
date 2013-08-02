@@ -5,6 +5,7 @@ import static com.codexperiments.robolabor.task.android.AndroidTaskManagerExcept
 import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.innerTasksNotAllowed;
 import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.internalError;
 import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.invalidEmitterId;
+import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.mustBeExecutedFromUIThread;
 import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.notCalledFromTask;
 import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.progressCalledAfterTaskFinished;
 import static com.codexperiments.robolabor.task.android.AndroidTaskManagerException.taskExecutedFromUnexecutedTask;
@@ -19,8 +20,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import android.app.Application;
+import android.os.Looper;
 
 import com.codexperiments.robolabor.task.TaskManager;
 import com.codexperiments.robolabor.task.TaskManagerConfig;
@@ -35,6 +39,7 @@ import com.codexperiments.robolabor.task.handler.TaskResult;
 import com.codexperiments.robolabor.task.handler.TaskStart;
 import com.codexperiments.robolabor.task.id.TaskId;
 import com.codexperiments.robolabor.task.util.AutoCleanMap;
+import com.codexperiments.robolabor.task.util.EmptyLock;
 
 /**
  * TODO Remove TaskId but create a TaskEquality helper class.
@@ -55,6 +60,7 @@ public class AndroidTaskManager implements TaskManager {
     private static int TASK_REF_COUNTER;
 
     private TaskScheduler mDefaultScheduler;
+    private LockingStrategy mLockingStrategy;
     private TaskManagerConfig mConfig;
     // All the current running tasks.
     private Set<TaskContainer<?>> mContainers;
@@ -75,6 +81,8 @@ public class AndroidTaskManager implements TaskManager {
 
         mDefaultScheduler = new AndroidUITaskScheduler();
         mConfig = pConfig;
+        mLockingStrategy = new UIThreadLockingStrategy();
+        mLockingStrategy.createManager(this);
         mContainers = Collections.newSetFromMap(new ConcurrentHashMap<TaskContainer<?>, Boolean>(DEFAULT_CAPACITY));
         mEmitters = new ConcurrentHashMap<TaskEmitterId, TaskEmitterRef>(DEFAULT_CAPACITY);
         mDescriptors = new AutoCleanMap<TaskHandler, TaskDescriptor<?>>(DEFAULT_CAPACITY);
@@ -83,7 +91,7 @@ public class AndroidTaskManager implements TaskManager {
     @Override
     public void manage(Object pEmitter) {
         if (pEmitter == null) throw new NullPointerException("Emitter is null");
-        mDefaultScheduler.checkCurrentThread();
+        mLockingStrategy.checkCallIsAllowed();
 
         // Save the new emitter in the reference list. Replace the existing one, if any, according to its id (the old one is
         // considered obsolete). Emitter Id is computed by the configuration and can be null if emitter is not managed.
@@ -110,7 +118,7 @@ public class AndroidTaskManager implements TaskManager {
     @Override
     public void unmanage(Object pEmitter) {
         if (pEmitter == null) throw new NullPointerException("Emitter is null");
-        mDefaultScheduler.checkCurrentThread();
+        mLockingStrategy.checkCallIsAllowed();
 
         // Remove an existing task emitter. If the emitter reference (in Java terms) is different from the object to remove, then
         // don't do anything. This could occur if a new object is managed before an older one with the same Id is unmanaged.
@@ -138,10 +146,10 @@ public class AndroidTaskManager implements TaskManager {
     public <TResult> TaskRef<TResult> execute(Task<TResult> pTask, TaskResult<TResult> pTaskResult) {
         if (pTask == null) throw new NullPointerException("Task is null");
         if (pTaskResult == null) throw new NullPointerException("TaskResult is null");
-        mDefaultScheduler.checkCurrentThread();
+        mLockingStrategy.checkCallIsAllowed();
 
         // Create a container to run the task.
-        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, mDefaultScheduler, mConfig);
+        TaskContainer<TResult> lContainer = new TaskContainer<TResult>(pTask, mDefaultScheduler);
         // Save the task before running it.
         // Note that it is safe to add the task to the container since it is an empty stub that shouldn't create any side-effect.
         if (mContainers.add(lContainer)) {
@@ -168,7 +176,7 @@ public class AndroidTaskManager implements TaskManager {
     public <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult) {
         if (pTaskRef == null) throw new NullPointerException("Task is null");
         if (pTaskResult == null) throw new NullPointerException("TaskResult is null");
-        mDefaultScheduler.checkCurrentThread();
+        mLockingStrategy.checkCallIsAllowed();
 
         // TODO It seems possible to add a reference from the TaskRef to the TaskContainer to avoid this lookup.
         for (TaskContainer<?> lContainer : mContainers) {
@@ -240,7 +248,6 @@ public class AndroidTaskManager implements TaskManager {
         private final TaskRef<TResult> mTaskRef;
         private final TaskId mTaskId;
         private final TaskScheduler mScheduler;
-        private final TaskManagerConfig mConfig;
 
         // Task result and state.
         private TResult mResult;
@@ -251,7 +258,7 @@ public class AndroidTaskManager implements TaskManager {
         // Cached values.
         private Runnable mProgressRunnable;
 
-        public TaskContainer(Task<TResult> pTask, TaskScheduler pScheduler, TaskManagerConfig pConfig) {
+        public TaskContainer(Task<TResult> pTask, TaskScheduler pScheduler) {
             super();
             mTask = pTask;
 
@@ -259,7 +266,6 @@ public class AndroidTaskManager implements TaskManager {
             mTaskRef = new TaskRef<TResult>(TASK_REF_COUNTER++);
             mTaskId = (pTask instanceof TaskIdentifiable) ? ((TaskIdentifiable) pTask).getId() : null;
             mScheduler = pScheduler;
-            mConfig = pConfig;
 
             mResult = null;
             mThrowable = null;
@@ -292,7 +298,7 @@ public class AndroidTaskManager implements TaskManager {
             });
 
             // Save the descriptor so that any child task can use current descriptor as a parent.
-            mDescriptors.put(pTaskResult, lDescriptor); // TODO Check for optim
+            mDescriptors.put(pTaskResult, lDescriptor); // TODO Global lock that could lead to contention. Check for optim.
             return mTaskRef;
         }
 
@@ -375,7 +381,7 @@ public class AndroidTaskManager implements TaskManager {
                 mDescriptor = lDescriptor;
                 restore(lDescriptor);
                 // Save the descriptor so that any child task can use current descriptor as a parent.
-                mDescriptors.put(pTaskResult, lDescriptor); // TODO Check for optim
+                mDescriptors.put(pTaskResult, lDescriptor); // TODO Global lock that could lead to contention. Check for optim.
             }
         }
 
@@ -483,6 +489,7 @@ public class AndroidTaskManager implements TaskManager {
         // when starting a child task from a parent task handler (e.g. in onFinish()): when the child task is launched, it must
         // not dereference emitters because the parent task is still in its onFinish() handler and may need references to them.
         private int mReferenceCounter;
+        private final Lock mLock;
 
         // TODO Boolean option to indicate if we should look for emitter or if task is not "managed".
         public TaskDescriptor(TaskResult<TResult> pTaskResult) {
@@ -490,6 +497,7 @@ public class AndroidTaskManager implements TaskManager {
             mEmitterDescriptors = null;
             mParentDescriptors = null;
             mReferenceCounter = 0;
+            mLock = mLockingStrategy.createLock();
 
             prepareDescriptor();
         }
@@ -701,36 +709,37 @@ public class AndroidTaskManager implements TaskManager {
 
             // Restore references for current container if referencing succeeded previously.
             if (mEmitterDescriptors != null) {
-                synchronized (this) {
-                    try {
-                        // TODO There is a race problem in this code. A TaskEmitterRef can be used several times for one
-                        // TaskDescriptor because of parent or superclass emitters ref that may be identical. In that case, a call
-                        // to manage() on another thread during referenceEmitter() may cause two different emitters to be restored
-                        // whereas we would expect the same ref.
-                        if ((mReferenceCounter++) == 0) {
-                            for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
-                                if (!lEmitterDescriptor.reference(mTaskResult) && pRollbackOnFailure) {
-                                    // Rollback modifications in case of failure.
-                                    --mReferenceCounter;
-                                    for (TaskEmitterDescriptor lRolledEmitterDescriptor : mEmitterDescriptors) {
-                                        if (lRolledEmitterDescriptor == lEmitterDescriptor) break;
-                                        lRolledEmitterDescriptor.dereference(mTaskResult);
-                                    }
-                                    return false;
+                mLock.lock();
+                try {
+                    // TODO There is a race problem in this code. A TaskEmitterRef can be used several times for one
+                    // TaskDescriptor because of parent or superclass emitters ref that may be identical. In that case, a call
+                    // to manage() on another thread during referenceEmitter() may cause two different emitters to be restored
+                    // whereas we would expect the same ref.
+                    if ((mReferenceCounter++) == 0) {
+                        for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
+                            if (!lEmitterDescriptor.reference(mTaskResult) && pRollbackOnFailure) {
+                                // Rollback modifications in case of failure.
+                                --mReferenceCounter;
+                                for (TaskEmitterDescriptor lRolledEmitterDescriptor : mEmitterDescriptors) {
+                                    if (lRolledEmitterDescriptor == lEmitterDescriptor) break;
+                                    lRolledEmitterDescriptor.dereference(mTaskResult);
                                 }
+                                return false;
                             }
                         }
                     }
-                    // Note: Rollback any modifications if an exception occurs. Having an exception here denotes an internal bug.
-                    catch (AndroidTaskManagerException eTaskManagerAndroidException) {
-                        --mReferenceCounter;
-                        // Note that if referencing failed at some point, dereferencing is likely to fail too. That's not a big
-                        // issue since an exception will be thrown in both cases anyway.
-                        for (TaskEmitterDescriptor lRolledEmitterDescriptor : mEmitterDescriptors) {
-                            lRolledEmitterDescriptor.dereference(mTaskResult);
-                        }
-                        throw eTaskManagerAndroidException;
+                }
+                // Note: Rollback any modifications if an exception occurs. Having an exception here denotes an internal bug.
+                catch (AndroidTaskManagerException eTaskManagerAndroidException) {
+                    --mReferenceCounter;
+                    // Note that if referencing failed at some point, dereferencing is likely to fail too. That's not a big
+                    // issue since an exception will be thrown in both cases anyway.
+                    for (TaskEmitterDescriptor lRolledEmitterDescriptor : mEmitterDescriptors) {
+                        lRolledEmitterDescriptor.dereference(mTaskResult);
                     }
+                    throw eTaskManagerAndroidException;
+                } finally {
+                    mLock.unlock();
                 }
             }
             return true;
@@ -751,15 +760,17 @@ public class AndroidTaskManager implements TaskManager {
             }
 
             if (mEmitterDescriptors != null) {
-                synchronized (this) {
+                mLock.lock();
+                try {
                     // Note: No need to rollback modifications if an exception occur. Leave references as is, thus creating a
-                    // memory
-                    // leak. We can't do much about it since having an exception here denotes an internal bug.
+                    // memory leak. We can't do much about it since having an exception here denotes an internal bug.
                     if ((--mReferenceCounter) == 0) {
                         for (TaskEmitterDescriptor lEmitterDescriptor : mEmitterDescriptors) {
                             lEmitterDescriptor.dereference(mTaskResult);
                         }
                     }
+                } finally {
+                    mLock.unlock();
                 }
             }
         }
@@ -983,6 +994,67 @@ public class AndroidTaskManager implements TaskManager {
         @Override
         public String toString() {
             return "TaskEmitterId [mType=" + mType + ", mId=" + mId + "]";
+        }
+    }
+
+    /**
+     * Allows changing the way things are synchronized in the code (i.e. everything on the UI-Thread or multi-threaded).
+     */
+    public interface LockingStrategy {
+        void createManager(AndroidTaskManager pAndroidTaskManager);
+
+        Lock createLock();
+
+        void checkCallIsAllowed();
+    }
+
+    /**
+     * Everything is done on the UI-Thread. No lock required.
+     */
+    public class UIThreadLockingStrategy implements LockingStrategy {
+        private Looper mUILooper;
+
+        public UIThreadLockingStrategy() {
+            super();
+            mUILooper = Looper.getMainLooper();
+        }
+
+        @Override
+        public void createManager(AndroidTaskManager pAndroidTaskManager) {
+            pAndroidTaskManager.mContainers = Collections.newSetFromMap(new ConcurrentHashMap<TaskContainer<?>, Boolean>(DEFAULT_CAPACITY));
+            pAndroidTaskManager.mEmitters = new ConcurrentHashMap<TaskEmitterId, TaskEmitterRef>(DEFAULT_CAPACITY);
+            pAndroidTaskManager.mDescriptors = new AutoCleanMap<TaskHandler, TaskDescriptor<?>>(DEFAULT_CAPACITY);
+        }
+
+        @Override
+        public Lock createLock() {
+            return new EmptyLock();
+        }
+
+        @Override
+        public void checkCallIsAllowed() {
+            if (Looper.myLooper() != mUILooper) throw mustBeExecutedFromUIThread();
+        }
+    }
+
+    /**
+     * Tasks and handlers can be executed on any threads concurrently.
+     */
+    public class MultiThreadLockingStrategy implements LockingStrategy {
+        @Override
+        public void createManager(AndroidTaskManager pAndroidTaskManager) {
+            pAndroidTaskManager.mContainers = Collections.newSetFromMap(new ConcurrentHashMap<TaskContainer<?>, Boolean>(DEFAULT_CAPACITY));
+            pAndroidTaskManager.mEmitters = new ConcurrentHashMap<TaskEmitterId, TaskEmitterRef>(DEFAULT_CAPACITY);
+            pAndroidTaskManager.mDescriptors = new AutoCleanMap<TaskHandler, TaskDescriptor<?>>(DEFAULT_CAPACITY);
+        }
+
+        @Override
+        public Lock createLock() {
+            return new ReentrantLock();
+        }
+
+        @Override
+        public void checkCallIsAllowed() {
         }
     }
 }
