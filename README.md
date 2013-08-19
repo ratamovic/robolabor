@@ -1,6 +1,12 @@
 robolabor
 =========
 
+Licensing
+---------
+
+Unknown yet... Just ask!
+
+
 robolabor-task
 --------------
 
@@ -63,7 +69,7 @@ public class MyActivity extends Activity {
 ...
 ~~~
 
-- While the Activity or Fragment is running, between a call to `TaskManager.manage()` and `TaskManager.unmanage()`, simply start a new asynchronous task using `TaskManager.execute()`. A helper class `TaskAdapter` is provided to implement only the methods you need.
+- While the Activity or Fragment is running, between a call to `TaskManager.manage()` and `TaskManager.unmanage()`, simply start a new asynchronous task using `TaskManager.execute()`. A helper class `TaskAdapter` is provided to implement only the methods you need:
     1. `TaskStart.onStart()` is called immediately.
     2. The task is run using `Task.onProcess()`
     3. When `Task.onProcess()` is over, `TaskResult.onFinish()` is called with the returned result or else `TaskResult.onFail()`if an exception was raised during processing.
