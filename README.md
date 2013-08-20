@@ -4,7 +4,7 @@ robolabor
 Licensing
 ---------
 
-Unknown yet... Just ask!
+Unknown yet... Just ask please!
 
 
 robolabor-task
@@ -12,7 +12,7 @@ robolabor-task
 
 ### Getting started
 
-Robolabor Task is a module aiming at making asynchronous task management easier and less error-prone on Android.
+Robolabor Task is a module aiming at making asynchronous task management easier and less leak-prone on Android. It's still a work-in-progress-alpha version that need more thorough testing and some redesign but it works for a basic usage. This module works in a very similar way to AsyncTasks and can be used in the same contexts. But at the difference of Android AsyncTasks, it enables the use of inner-classes with references to an outer Activity, Fragment or any other kind of object without memory leaks.
 
 To start an asynchrnous Task, simply:
 - Create a global instance of AndroidTaskManager (using a singleton, a static variable, an Application class instance or whatever you want).
@@ -109,4 +109,6 @@ public class MyActivity extends Activity {
 
 ### How it works
 
-Robolabor task ensure no memory leaks is created during the asynchronous task processing by **dereferencing**, i.e. removing Java references, to enclosing class(es) by reflection. When a handler is called (i.e. `TaskStart.onStart()`, `TaskResult.onFinish()`, `TaskResult.onFail()`, `TaskProgress.onProgress()`), references to enclosing class(es) are restored temporarily while the handler is executed (and removed again right after).
+Robolabor task ensure no memory leaks is created during the asynchronous task processing by **dereferencing**, i.e. removing Java references, to enclosing class(es) by reflection. When a handler is called (i.e. `TaskStart.onStart()`, `TaskResult.onFinish()`, `TaskResult.onFail()`, `TaskProgress.onProgress()`), references to enclosing class(es) are restored temporarily while the handler is executed (and removed again right after). The trick here (you may like it or not) is to look for any field named like `this$0` in the passed task handlers. It is then easy to modify such references by reflection in Java.
+
+Of course, in practice, this process is a bit more complicated, with some tricky edge cases to handle (such as tasks can container other tasks, etc.). In addition, since it relies on field naming, it is important to configure Proguard appropriately to avoid any surprise in a production application. But apart from that, I think this little library can bring back to inner-classes the flexibility they deserve.
