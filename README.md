@@ -15,7 +15,7 @@ robolabor-task
 Robolabor Task is a module aiming at making asynchronous task management easier and less leak-prone on Android. It's still a work-in-progress-alpha version that need more thorough testing and some redesign but it works for a basic usage. This module works in a very similar way to AsyncTasks and can be used in the same contexts. But at the difference of Android AsyncTasks, it enables the use of inner-classes with references to an outer Activity, Fragment or any other kind of object without memory leaks.
 
 To start an asynchrnous Task, simply:
-- Create a global instance of AndroidTaskManager (using a singleton, a static variable, an Application class instance or whatever you want).
+- Create a global instance of AndroidTaskManager (using a singleton, a static variable, an Application class instance or whatever you want). Note that `keepResultOnHold()` option is enabled here to make sure termination handlers are called only when an Activity or Fragment is bound.
 
 ~~~
 mTaskManager = new AndroidTaskManager(getApplication(), new AndroidTaskManagerConfig(getApplication()) {
@@ -105,6 +105,7 @@ public class MyActivity extends Activity {
 **Note that:**
 - **YOU CANNOT** access enclosing class variables while you are in the `Task.onProcess()` method. Use (possibly final) parameters or local variables instead.
 - If the Activity or Fragment stops and a task is running, the callback will be automatically reattached to the new activity and `TaskStart.onStart()` executed again with pIsRestored set to true.
+- Termination handlers can be called immediately when a task finishes even if no Activity or Fragment is bound when `keepResultOnHold()` option is set to false. In this situation, it is possible to know if outer object is bound by checking its reference (e.g. `MyActivity.this != null`).
 
 
 ### How it works
