@@ -22,7 +22,7 @@ public class AndroidTaskManagerException extends RuntimeException {
         return new AndroidTaskManagerException("A call to manage for emitter %2$s with Id %1$s is missing.", pEmitterId, pEmitter);
     }
 
-    public static AndroidTaskManagerException innerTasksNotAllowed(Task<?> pTask) {
+    public static AndroidTaskManagerException innerTasksNotAllowed(Task<?, ?, ?> pTask) {
         return new AndroidTaskManagerException("Inner tasks like %1$s not allowed by configuration.", pTask.getClass());
     }
 

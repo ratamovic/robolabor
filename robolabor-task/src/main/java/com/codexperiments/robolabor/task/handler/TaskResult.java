@@ -10,7 +10,7 @@ public interface TaskResult<TResult> extends TaskHandler {
      * 
      * @param pTaskManager Use this TaskManager to perform any operation from the handler.
      */
-    void onFinish(/* TaskManager pTaskManager, */TResult pResult);
+    void onFinish(TResult pResult);
 
     /**
      * Handler method called when task computation has failed during execution or in the onFinish() handler. This method is called
@@ -22,5 +22,5 @@ public interface TaskResult<TResult> extends TaskHandler {
      * 
      * @param pTaskManager Use this TaskManager to perform any operation from the handler.
      */
-    void onFail(/* TaskManager pTaskManager, */Throwable pException);
+    void onFail(Throwable pException);
 }

@@ -9,7 +9,9 @@ import com.codexperiments.robolabor.task.handler.TaskStart;
 import com.codexperiments.robolabor.task.id.TaskId;
 import com.codexperiments.robolabor.task.id.UniqueTaskId;
 
-public class TaskAdapter<TResult> implements Task<TResult>, TaskResult<TResult>, TaskStart, TaskIdentifiable, TaskProgress {
+public class TaskAdapter<TParam, TProgress, TResult>
+    implements Task<TParam, TProgress, TResult>, TaskResult<TResult>, TaskStart, TaskIdentifiable, TaskProgress<TProgress>
+{
     private TaskId mId;
 
     public TaskAdapter() {
@@ -27,12 +29,12 @@ public class TaskAdapter<TResult> implements Task<TResult>, TaskResult<TResult>,
     }
 
     @Override
-    public TResult onProcess(TaskNotifier pNotifier) throws Exception {
+    public TResult onProcess(TParam pParam, TaskNotifier<TProgress> pNotifier) throws Exception {
         return null;
     }
 
     @Override
-    public void onProgress() {
+    public void onProgress(TProgress pProgress) {
     }
 
     @Override

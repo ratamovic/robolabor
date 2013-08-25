@@ -7,8 +7,7 @@ import com.codexperiments.robolabor.task.handler.Task;
 /**
  * Interface that defines how the TaskManager works.
  */
-public interface TaskManagerConfig
-{
+public interface TaskManagerConfig {
     /**
      * Gives an object identifying an emitter. Basicallt, this identifier is used later as an indirection to access the emitter
      * (actually a Weak reference to it) while avoiding any possible memory leak. This Id could be a String, an Integer
@@ -35,7 +34,7 @@ public interface TaskManagerConfig
      * @param pTask Task that need to be executed on the executor.
      * @return Executor to use for the specified task.
      */
-    ExecutorService resolveExecutor(Task<?> pTask);
+    ExecutorService resolveExecutor(Task<?, ?, ?> pTask);
 
     /**
      * Configuration option to indicate that TaskManager should wait for an object to be bound to the task before to execute task
@@ -52,7 +51,7 @@ public interface TaskManagerConfig
      * @param pTask Task the result of which need to be kept or not until an object is bound.
      * @return True to save task result until an object is bound or false to execute termination handlers immediately.
      */
-    boolean keepResultOnHold(Task<?> pTask);
+    boolean keepResultOnHold(Task<?, ?, ?> pTask);
 
     /**
      * Configuration option to forbid use of unmanaged objects.

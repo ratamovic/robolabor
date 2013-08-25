@@ -16,7 +16,7 @@ import com.codexperiments.robolabor.task.TaskRef;
 import com.codexperiments.robolabor.task.handler.TaskNotifier;
 import com.codexperiments.robolabor.task.util.ProgressTask;
 
-public class BackgroundTask implements ProgressTask<Integer> {
+public class BackgroundTask implements ProgressTask<Integer, Integer, Integer> {
     public static final int TASK_STEP_COUNT = 5;
     public static final int TASK_STEP_DURATION_MS = 1000;
     // At least one test must wait until this delay has ended. So please avoid increasing it except for debugging purpose.
@@ -69,7 +69,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
     }
 
     @Override
-    public Integer onProcess(TaskNotifier pNotifier) throws Exception {
+    public Integer onProcess(Integer pParam, TaskNotifier<Integer> pNotifier) throws Exception {
         assertThat(mTaskFinished.getCount(), equalTo(1l)); // Ensure task is executed only once.
         // We have two cases here: either we loop until step by step is over or until we have performed all iterations.
         // We know that we are in step by step mode if mStepByStep is true at the beginning of the loop.
@@ -80,7 +80,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
 
             Thread.sleep(TASK_STEP_DURATION_MS);
             ++mStepCounter;
-            pNotifier.notifyProgress();
+            pNotifier.notifyProgress(mStepCounter);
             notifyEnded();
         }
         if (mExpectedTaskException == null) {
@@ -91,7 +91,7 @@ public class BackgroundTask implements ProgressTask<Integer> {
     }
 
     @Override
-    public void onProgress() {
+    public void onProgress(Integer pProgress) {
         ++mProgressCounter;
         if (mTaskStepProgress != null) {
             mTaskStepProgress.countDown();

@@ -17,16 +17,14 @@ import com.codexperiments.robolabor.task.handler.Task;
 /**
  * Example configuration that handles basic Android components: Activity and Fragments.
  */
-public class AndroidTaskManagerConfig implements TaskManagerConfig
-{
+public class AndroidTaskManagerConfig implements TaskManagerConfig {
     private Application mApplication;
     private ExecutorService mSerialExecutor;
 
     private Class<?> mFragmentClass;
     private Class<?> mFragmentCompatClass;
 
-    public AndroidTaskManagerConfig(Application pApplication)
-    {
+    public AndroidTaskManagerConfig(Application pApplication) {
         mApplication = pApplication;
         mSerialExecutor = createExecutors();
 
@@ -48,11 +46,9 @@ public class AndroidTaskManagerConfig implements TaskManagerConfig
      * 
      * @return Instance of the serial executor.
      */
-    protected ExecutorService createExecutors()
-    {
+    protected ExecutorService createExecutors() {
         return Executors.newSingleThreadExecutor(new ThreadFactory() {
-            public Thread newThread(Runnable pRunnable)
-            {
+            public Thread newThread(Runnable pRunnable) {
                 Thread thread = new Thread(pRunnable);
                 thread.setDaemon(true);
                 return thread;
@@ -61,8 +57,7 @@ public class AndroidTaskManagerConfig implements TaskManagerConfig
     }
 
     @Override
-    public Object resolveEmitterId(Object pEmitter)
-    {
+    public Object resolveEmitterId(Object pEmitter) {
 
         if (pEmitter instanceof Activity) {
             return resolveActivityId((Activity) pEmitter);
@@ -82,8 +77,7 @@ public class AndroidTaskManagerConfig implements TaskManagerConfig
      * @param pActivity Activity to find the Id of.
      * @return Activity class.
      */
-    protected Object resolveActivityId(Activity pActivity)
-    {
+    protected Object resolveActivityId(Activity pActivity) {
         return pActivity.getClass();
     }
 
@@ -95,8 +89,7 @@ public class AndroidTaskManagerConfig implements TaskManagerConfig
      * @return Fragment Id if not 0, Fragment Tag if not empty or else its Fragment class.
      */
     @TargetApi(Build.VERSION_CODES.HONEYCOMB)
-    protected Object resolveFragmentId(android.app.Fragment pFragment)
-    {
+    protected Object resolveFragmentId(android.app.Fragment pFragment) {
         if (pFragment.getId() > 0) {
             return pFragment.getId();
         } else if (pFragment.getTag() != null && !TextUtils.isEmpty(pFragment.getTag())) {
@@ -109,8 +102,7 @@ public class AndroidTaskManagerConfig implements TaskManagerConfig
     /**
      * Same as the homonym method but for fragments from the compatiblity library.
      */
-    protected Object resolveFragmentId(android.support.v4.app.Fragment pFragment)
-    {
+    protected Object resolveFragmentId(android.support.v4.app.Fragment pFragment) {
         if (pFragment.getId() > 0) {
             return pFragment.getId();
         } else if (pFragment.getTag() != null && !TextUtils.isEmpty(pFragment.getTag())) {
@@ -121,32 +113,27 @@ public class AndroidTaskManagerConfig implements TaskManagerConfig
     }
 
     @Override
-    public boolean keepResultOnHold(Task<?> pTask)
-    {
+    public boolean keepResultOnHold(Task<?, ?, ?> pTask) {
         return false;
     }
 
     @Override
-    public ExecutorService resolveExecutor(Task<?> pTask)
-    {
+    public ExecutorService resolveExecutor(Task<?, ?, ?> pTask) {
         return mSerialExecutor;
     }
 
     @Override
-    public boolean allowUnmanagedEmitters()
-    {
+    public boolean allowUnmanagedEmitters() {
         return true;
     }
 
     @Override
-    public boolean allowInnerTasks()
-    {
+    public boolean allowInnerTasks() {
         return true;
     }
 
     @Override
-    public boolean crashOnHandlerFailure()
-    {
+    public boolean crashOnHandlerFailure() {
         return (mApplication.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
     }
 }

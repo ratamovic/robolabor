@@ -1,5 +1,6 @@
 package com.codexperiments.robolabor.task;
 
+import com.codexperiments.robolabor.task.android.AndroidTaskManager.TaskPipeBuilder;
 import com.codexperiments.robolabor.task.handler.Task;
 import com.codexperiments.robolabor.task.handler.TaskResult;
 
@@ -73,11 +74,15 @@ public interface TaskManager {
 
     void unmanage(Object pEmitter);
 
-    <TResult> TaskRef<TResult> execute(Task<TResult> pTask);
+    <TResult> TaskPipeBuilder<TResult> when(Task<?, ?, TResult> pTask);
 
-    <TResult> TaskRef<TResult> execute(Task<TResult> pTask, TaskResult<TResult> pTaskResult);
+    <TResult> TaskPipeBuilder<TResult> when(Task<?, ?, TResult> pTask, TaskResult<TResult> pTaskResult);
 
-    <TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult);
+    <TParam, TProgress, TResult> TaskRef<TResult> execute(Task<TParam, TProgress, TResult> pTask);
+
+    <TParam, TProgress, TResult> TaskRef<TResult> execute(Task<TParam, TProgress, TResult> pTask, TaskResult<TResult> pTaskResult);
+
+    <TParam, TProgress, TResult> boolean rebind(TaskRef<TResult> pTaskRef, TaskResult<TResult> pTaskResult);
 
     void notifyProgress(/* TaskProgress pProgress */);
 }
