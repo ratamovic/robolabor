@@ -213,7 +213,9 @@ public class AndroidTaskManager implements TaskManager {
     }
 
     public void gogogo(TaskContainer<?, ?, ?> pContainer) {
-        mConfig.resolveExecutor(pContainer.mTask).execute(pContainer);
+        if (pContainer != null) {
+            mConfig.resolveExecutor(pContainer.mTask).execute(pContainer);
+        }
     }
 
     @Override
